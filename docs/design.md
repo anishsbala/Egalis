@@ -1,7 +1,7 @@
 # Egalis design proposal
 
-Status: milestone 2 source boundary; consensus is not implemented.
-Implemented scope: Checked replica/instance IDs, ballot ownership, fixed membership and quorum accounting. Decisions
+Status: milestone 3 source boundary; consensus is not implemented.
+Implemented scope: Foundation types plus deterministic GET/PUT/CAS semantics and conflict detection. Decisions
 below distinguish the selected algorithm from engineering extensions. Changes to
 the algorithm require an explicit design revision and new counterexample tests.
 

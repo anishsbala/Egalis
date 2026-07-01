@@ -9,7 +9,7 @@ The simulator and future servers must share the same protocol core.
 | --- | --- | --- | --- |
 | 1 | build: establish C++20 and GoogleTest harness | 2026-07-01T09:35:00-04:00 | Implemented and verified |
 | 2 | protocol: define baseline instance and ballot types | 2026-07-01T11:10:00-04:00 | Implemented and verified |
-| 3 | kv: define deterministic commands and conflicts | 2026-07-01T14:05:00-04:00 | Planned |
+| 3 | kv: define deterministic commands and conflicts | 2026-07-01T14:05:00-04:00 | Implemented and verified |
 | 4 | protocol: extract baseline transitions and messages | 2026-07-01T16:40:00-04:00 | Planned |
 | 5 | sim: add deterministic network scheduler | 2026-07-02T10:20:00-04:00 | Planned |
 | 6 | sim: add fault schedules and trace replay | 2026-07-02T11:35:00-04:00 | Planned |
