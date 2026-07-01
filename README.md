@@ -2,9 +2,9 @@
 
 A planned C++20 distributed key-value store based on baseline EPaxos*.
 
-Status: milestone 3 source boundary. Foundation types plus deterministic GET/PUT/CAS semantics and conflict detection.
+Status: milestone 4 source boundary. Foundation types, KV semantics, and the baseline-only message/transition contract.
 No consensus agreement, recovery, durable storage, TCP server, or benchmark is implemented.
-This boundary's original test result was 10/10; fresh reconstruction checks
+This boundary's original test result was 19/19; fresh reconstruction checks
 are retained in the separate history-preparation report.
 
 - [Architecture, protocol selection, assumptions, and open decisions](docs/design.md)

@@ -1,7 +1,7 @@
 # Implementation roadmap
 
 Each row is an engineering milestone that may span multiple coherent commits,
-not a calendar commitment or claim of completion. At this source boundary, milestones 1–3 are implemented and locally verified,
+not a calendar commitment or claim of completion. At this source boundary, milestones 1–4 are implemented and locally verified,
 at this boundary. Remaining milestones are planned. See commit-plan.md for status. Later work
 starts only when prerequisites are verified. Small adjustments or split commits
 are welcome when review reveals additional obligations; never manufacture changes
