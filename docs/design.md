@@ -1,7 +1,7 @@
 # Egalis design proposal
 
-Status: milestone 1 source boundary; consensus is not implemented.
-Implemented scope: Build and design scaffolding only; no protocol or simulator functionality. Decisions
+Status: milestone 2 source boundary; consensus is not implemented.
+Implemented scope: Checked replica/instance IDs, ballot ownership, fixed membership and quorum accounting. Decisions
 below distinguish the selected algorithm from engineering extensions. Changes to
 the algorithm require an explicit design revision and new counterexample tests.
 

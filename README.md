@@ -2,9 +2,9 @@
 
 A planned C++20 distributed key-value store based on baseline EPaxos*.
 
-Status: milestone 1 source boundary. Build and design scaffolding only; no protocol or simulator functionality.
+Status: milestone 2 source boundary. Checked replica/instance IDs, ballot ownership, fixed membership and quorum accounting.
 No consensus agreement, recovery, durable storage, TCP server, or benchmark is implemented.
-This boundary's original test result was 1/1; fresh reconstruction checks
+This boundary's original test result was 6/6; fresh reconstruction checks
 are retained in the separate history-preparation report.
 
 - [Architecture, protocol selection, assumptions, and open decisions](docs/design.md)

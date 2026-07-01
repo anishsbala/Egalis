@@ -2,8 +2,8 @@
 
 ## Current coverage
 
-This boundary contains 1 GoogleTests, including the original C++20 build
-contract. Implemented scope: Build and design scaffolding only; no protocol or simulator functionality.
+This boundary contains 6 GoogleTests, including the original C++20 build
+contract. Implemented scope: Checked replica/instance IDs, ballot ownership, fixed membership and quorum accounting.
 Agreement/recovery and durable protocol behavior are not implemented or tested.
 
 ## Behavioral testing layers
