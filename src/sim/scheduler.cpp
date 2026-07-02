@@ -16,12 +16,17 @@ Scheduler::Scheduler(Observer observer) : observer_(std::move(observer)) {}
 
 void Scheduler::check_healthy() const {
   if (failed_) throw std::logic_error("scheduler failed; start a fresh simulation");
+  if (observing_) throw std::logic_error("observers cannot mutate or run the scheduler");
 }
 
 void Scheduler::observe(EventAction action, const EventInfo& info) {
+  if (!observer_) return;
+  observing_ = true;
   try {
-    if (observer_) observer_(action, info);
+    observer_(action, info);
+    observing_ = false;
   } catch (...) {
+    observing_ = false;
     failed_ = true;
     throw;
   }
@@ -36,12 +41,14 @@ EventId Scheduler::schedule_at(LogicalTime time, std::string label, Callback cal
     throw std::overflow_error("event identity space exhausted");
   }
   EventInfo info{EventId{next_id_}, EventSequence{next_sequence_}, time, std::move(label)};
-  auto [it, inserted] = events_.emplace(Key{time, info.sequence}, Event{info, std::move(callback)});
+  const auto id = info.id;
+  const Key key{time, info.sequence};
+  auto [it, inserted] = events_.emplace(key, Event{std::move(info), std::move(callback)});
   if (!inserted) throw std::logic_error("event sequence reused");
   ++next_id_;
   ++next_sequence_;
   observe(EventAction::scheduled, it->second.info);
-  return info.id;
+  return id;
 }
 
 EventId Scheduler::schedule_after(Duration delay, std::string label, Callback callback) {

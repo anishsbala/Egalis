@@ -95,6 +95,31 @@ TEST(Messages, InvalidatorsHaveCheckedIdentityAndPhase) {
                std::invalid_argument);
 }
 
+TEST(Messages, RecoveryFieldCombinationsRespectPhaseAndBallotSeparation) {
+  const auto joined = Ballot::recovery(2, a);
+  const std::vector<kv::Payload> payloads{std::monostate{}, kv::Nop{}, command};
+  for (unsigned phase_number = 0; phase_number < 5; ++phase_number) {
+    for (unsigned accepted_number = 0; accepted_number < 2; ++accepted_number) {
+      for (const auto& candidate : payloads) {
+        const auto phase = static_cast<Phase>(phase_number);
+        const auto accepted = accepted_number ? recovery : Ballot{};
+        const auto envelope = wrap(RecoverOk{joined, id, accepted, candidate, {}, {}, phase});
+        const bool absent = std::holds_alternative<std::monostate>(candidate);
+        const bool nop = std::holds_alternative<kv::Nop>(candidate);
+        const bool valid = phase_number < 4 &&
+            (phase == Phase::initial || !absent) &&
+            (!(phase == Phase::initial || phase == Phase::preaccepted) || accepted.initial()) &&
+            (!nop || (!accepted.initial() && (phase == Phase::accepted || phase == Phase::committed)));
+        if (valid) {
+          EXPECT_NO_THROW(validate(envelope));
+        } else {
+          EXPECT_THROW(validate(envelope), std::invalid_argument);
+        }
+      }
+    }
+  }
+}
+
 TEST(Messages, CanonicalEncodingIsStableAndUnambiguousForBytesAndSets) {
   const InstanceId third{3, a};
   EXPECT_EQ(canonical(wrap(PreAccept{id, command, {third, other}})),

@@ -6,11 +6,15 @@ jobs:
     strategy:
       matrix:
         compiler: [g++, clang++]
+        sanitizers: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DEGALIS_ENABLE_SANITIZERS=${{ matrix.sanitizers }}
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1
         run: ctest --test-dir build --output-on-failure

@@ -2,15 +2,18 @@
 
 A planned C++20 distributed key-value store based on baseline EPaxos*.
 
-Status: milestone 5 source boundary. Foundation/message contracts plus the logical-time scheduler and typed simulated transport.
-No consensus agreement, recovery, durable storage, TCP server, or benchmark is implemented.
-This boundary's original test result was 30/30; fresh reconstruction checks
-are retained in the separate history-preparation report.
+Status: batch 1 (milestones 1–6) implemented and locally tested. Checked protocol
+types, deterministic KV semantics, baseline message contracts, and a single-threaded
+simulator with fault injection and trace replay are present. Agreement, recovery,
+persistent storage, TCP servers, and benchmarks remain unimplemented.
 
 - [Architecture, protocol selection, assumptions, and open decisions](docs/design.md)
 - [Dependency-ordered milestones](docs/roadmap.md)
 - [Testing strategy](docs/testing.md)
 - [Verification record](docs/verification.md)
+- [Six-batch commit plan and proposed calendar](docs/commit-plan.md)
+- [Baseline transition contract](docs/baseline-transitions.md)
+- [Simulator boundaries and fault semantics](docs/adr/0001-simulator-boundaries.md)
 
 Requires CMake 3.24+, a C++20 compiler, and Git. Tests use an installed GoogleTest
 1.15+ package or fetch a pinned GoogleTest revision during configuration.

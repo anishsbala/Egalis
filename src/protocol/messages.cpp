@@ -75,6 +75,8 @@ void validate(const Envelope& envelope) {
       dependencies(msg.initial_dependencies, msg.id);
       require(valid_phase(msg.phase), "invalid recovery phase");
       require(msg.accepted_ballot < msg.ballot, "RecoverOK must report an earlier accepted ballot");
+      require(!std::holds_alternative<kv::Nop>(msg.command) || !msg.accepted_ballot.initial(),
+              "Nop cannot have been accepted at ballot zero");
       if (msg.phase != Phase::initial) {
         require(!std::holds_alternative<std::monostate>(msg.command), "noninitial record lacks payload");
       }

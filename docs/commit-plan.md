@@ -12,7 +12,7 @@ The simulator and future servers must share the same protocol core.
 | 3 | kv: define deterministic commands and conflicts | 2026-07-01T14:05:00-04:00 | Implemented and verified |
 | 4 | protocol: extract baseline transitions and messages | 2026-07-01T16:40:00-04:00 | Implemented and verified |
 | 5 | sim: add deterministic network scheduler | 2026-07-02T10:20:00-04:00 | Implemented and verified |
-| 6 | sim: add fault schedules and trace replay | 2026-07-02T11:35:00-04:00 | Planned |
+| 6 | sim: add fault schedules and trace replay | 2026-07-02T11:35:00-04:00 | Implemented and verified |
 
 Future work requires real functionality, focused tests, build and review.
 Do not manufacture changes to meet a quota. Agreement, recovery, persistence

@@ -82,4 +82,15 @@ TEST(Scheduler, IdenticalInputsReproduceCompleteEventDecisions) {
   };
   EXPECT_EQ(scenario(), scenario());
 }
+
+TEST(Scheduler, ObserverCannotInvalidateTheEventItIsInspecting) {
+  Scheduler* owner = nullptr;
+  Scheduler scheduler{[&](EventAction, const EventInfo& info) {
+    owner->cancel(info.id);
+  }};
+  owner = &scheduler;
+  EXPECT_THROW(scheduler.schedule_after({0}, "observed", [] {}), std::logic_error);
+  EXPECT_TRUE(scheduler.failed());
+  EXPECT_THROW(scheduler.run(), std::logic_error);
+}
 }  // namespace egalis::sim

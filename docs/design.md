@@ -1,7 +1,6 @@
 # Egalis design proposal
 
-Status: milestone 5 source boundary; consensus is not implemented.
-Implemented scope: Foundation/message contracts plus the logical-time scheduler and typed simulated transport. Decisions
+Status: batch 1 foundations and simulator implemented; consensus is not implemented. Decisions
 below distinguish the selected algorithm from engineering extensions. Changes to
 the algorithm require an explicit design revision and new counterexample tests.
 
@@ -208,6 +207,7 @@ and snapshots/reconfiguration. Each deferred choice gets an ADR containing sourc
 sections, alternatives, invariants affected, and validation evidence before coding.
 
 Do not infer correctness or production readiness from passing tests. Benchmark
-claims require reproducible measured artifacts. Local Git initialization and the account-matching identity are authorized.
-Historical schedule approval is pending; no commits, historical timestamps,
-remote or push are authorized at this preparation stage.
+claims require reproducible measured artifacts. Local Git initialization and
+the account-matching identity are authorized; commits wait for approval of the
+schedule in commit-plan.md, and pushing still requires explicit approval.
+See adr/0001-simulator-boundaries.md for implemented simulator decisions and limits.

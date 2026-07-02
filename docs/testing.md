@@ -2,9 +2,12 @@
 
 ## Current coverage
 
-This boundary contains 30 GoogleTests, including the original C++20 build
-contract. Implemented scope: Foundation/message contracts plus the logical-time scheduler and typed simulated transport.
-Agreement/recovery and durable protocol behavior are not implemented or tested.
+Batch 1 includes GoogleTest coverage for checked IDs, ballots and quorum membership;
+GET/PUT/CAS semantics with 1,476 commuting state/pair checks; all baseline message
+alternatives; scheduling, transport faults, crashes, deterministic randomness,
+trace serialization and replay divergence. The build contract remains a toolchain
+smoke test. Agreement/recovery and durable protocol behavior are not implemented
+or tested yet. See verification.md for actual commands and results.
 
 ## Behavioral testing layers
 

@@ -56,6 +56,8 @@ class Scheduler {
   [[nodiscard]] LogicalTime now() const noexcept { return now_; }
   [[nodiscard]] std::size_t pending() const noexcept { return events_.size(); }
   [[nodiscard]] bool failed() const noexcept { return failed_; }
+  // Effect runners also fail closed when an immediate (self-message) callback fails.
+  void fail() noexcept { failed_ = true; }
  private:
   struct Event { EventInfo info; Callback callback; };
   using Key = std::pair<LogicalTime, EventSequence>;
@@ -67,6 +69,7 @@ class Scheduler {
   std::uint64_t next_sequence_ = 0;
   Observer observer_;
   bool executing_ = false;
+  bool observing_ = false;
   bool failed_ = false;
 };
 
