@@ -24,3 +24,10 @@ cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS=-W
 cmake --build build/debug --parallel 2
 ctest --test-dir build/debug --output-on-failure
 ```
+
+## C007: explicit event/effect contract
+
+GCC Debug with -Werror configured and built successfully; CTest passed 60/60.
+Four new contract tests cover payload ownership, ordered effects, invalid tokens,
+completion tags and delegation to message validation. No agreement handlers exist.
+Actual dated logs are maintained separately; this is a reconstructed boundary summary.
