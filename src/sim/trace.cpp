@@ -8,7 +8,7 @@
 namespace egalis::sim {
 namespace {
 void versions(const TraceData& data) {
-  if (data.version != 1 || data.random_version != 1) {
+  if ((data.version != 1 && data.version != 2) || data.random_version != 1) {
     throw std::invalid_argument("unsupported trace or PRNG version");
   }
 }
@@ -54,8 +54,9 @@ std::string unhex(const std::string& token) {
   }
   return bytes;
 }
-void valid_decision(const Decision& decision) {
-  if (static_cast<unsigned>(decision.kind) > static_cast<unsigned>(DecisionKind::timer) ||
+void valid_decision(const Decision& decision, std::uint32_t version) {
+  const auto last = version == 1 ? DecisionKind::timer : DecisionKind::protocol;
+  if (static_cast<unsigned>(decision.kind) > static_cast<unsigned>(last) ||
       decision.fields.size() > 16 || decision.detail.size() > 1024 * 1024) {
     throw std::invalid_argument("invalid or oversized trace decision");
   }
@@ -68,7 +69,7 @@ std::string serialize(const TraceData& data) {
   out.imbue(std::locale::classic());
   out << "EGALIS_TRACE " << data.version << ' ' << data.random_version << ' ' << data.seed << '\n';
   for (const auto& decision : data.decisions) {
-    valid_decision(decision);
+    valid_decision(decision, data.version);
     out << static_cast<unsigned>(decision.kind) << ' ' << decision.fields.size();
     for (const auto field : decision.fields) out << ' ' << field;
     out << ' ' << hex(decision.detail) << '\n';
@@ -86,7 +87,9 @@ TraceData parse_trace(std::string_view text) {
   const auto version = integer(take(header));
   const auto random_version = integer(take(header));
   TraceData data;
-  if (version != 1 || random_version != 1) throw std::invalid_argument("unsupported trace version");
+  if ((version != 1 && version != 2) || random_version != 1)
+    throw std::invalid_argument("unsupported trace version");
+  data.version = static_cast<std::uint32_t>(version);
   data.seed = integer(take(header));
   end_of_record(header);
   while (std::getline(input, line)) {
@@ -94,7 +97,8 @@ TraceData parse_trace(std::string_view text) {
     std::istringstream row{line};
     const auto kind = integer(take(row));
     const auto count = integer(take(row));
-    if (kind > static_cast<unsigned>(DecisionKind::timer) || count > 16) {
+    const auto last = version == 1 ? DecisionKind::timer : DecisionKind::protocol;
+    if (kind > static_cast<unsigned>(last) || count > 16) {
       throw std::invalid_argument("invalid trace decision header");
     }
     Decision decision{static_cast<DecisionKind>(kind), {}, {}};
@@ -102,7 +106,7 @@ TraceData parse_trace(std::string_view text) {
     for (std::uint64_t i = 0; i < count; ++i) decision.fields.push_back(integer(take(row)));
     decision.detail = unhex(take(row));
     end_of_record(row);
-    valid_decision(decision);
+    valid_decision(decision, data.version);
     data.decisions.push_back(std::move(decision));
   }
   return data;
@@ -111,7 +115,7 @@ TraceData parse_trace(std::string_view text) {
 Trace::Trace(std::uint64_t seed) { data_.seed = seed; }
 Trace::Trace(TraceData replay) : data_(std::move(replay)), replay_(true) {
   versions(data_);
-  for (const auto& decision : data_.decisions) valid_decision(decision);
+  for (const auto& decision : data_.decisions) valid_decision(decision, data_.version);
 }
 
 void Trace::check_healthy() const {
@@ -125,7 +129,7 @@ void Trace::diverge(const std::string& reason) const {
 
 void Trace::record(Decision decision) {
   check_healthy();
-  valid_decision(decision);
+  valid_decision(decision, data_.version);
   if (!replay_) {
     data_.decisions.push_back(std::move(decision));
     return;

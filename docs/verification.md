@@ -39,3 +39,19 @@ Seven new tests cover unique local registration, immutable authoritative state,
 canonical map iteration, all eleven unsupported message routes, timer replacement,
 ballot/token guards, stale completions and suspend/resume isolation.
 No preaccept, agreement, recovery or storage transition is implemented.
+
+## C009: shared core simulator endpoint
+
+GCC Debug with -Werror built successfully; all 83/83 CTest cases passed.
+Sixteen additional tests cover shared dispatch, synchronous self-effects, bounded
+pumping, timer replacement, crash/restart, duplicates, effect-source validation,
+fail-closed errors, callback lifetime, seeded replay and schema compatibility.
+Sixteen seeded five-replica scenarios run twice and replay from serialized traces.
+Trace schema 2 records core decisions; schema 1 transport artifacts remain readable.
+Agreement remains unimplemented. Full post-commit Debug/Release verification is
+recorded separately from reconstructed timestamp metadata.
+
+Post-commit Release initially stopped under -Werror on a maybe-uninitialized
+diagnostic in an intermediate effect-variant move. Constructing timer/cancellation
+alternatives directly in the vector removed the unnecessary move without weakening
+compiler flags. After this integration fix, Debug and Release both passed 83/83.

@@ -45,6 +45,12 @@ void Network::healthy() const {
   if (scheduler_.failed()) throw std::logic_error("network scheduler failed");
 }
 
+void Network::protocol_decision(protocol::ReplicaId replica, std::string detail) {
+  live(replica);
+  trace_.record({DecisionKind::protocol, {scheduler_.now().ticks, replica.value()},
+                 std::move(detail)});
+}
+
 Network::Slot& Network::live(protocol::ReplicaId replica) {
   healthy();
   auto& slot = endpoints_[replica.value()];

@@ -1,4 +1,5 @@
 #include "egalis/sim/trace.hpp"
+#include "egalis/sim/network.hpp"
 
 #include <gtest/gtest.h>
 #include <limits>
@@ -41,12 +42,13 @@ TEST(Trace, StableArtifactPreservesAllBytesAndMaximumIntegers) {
   EXPECT_EQ(parse_trace(serialize(data)), data);
   EXPECT_EQ(serialize(parse_trace(serialize(data))), serialize(data));
   TraceData small;
+  small.version = 1;  // Preserve the original artifact's golden bytes.
   small.decisions = {{DecisionKind::attached, {0, 1}, "x"}};
   EXPECT_EQ(serialize(small), "EGALIS_TRACE 1 1 0\n5 2 0 1 78\n");
 }
 
 TEST(Trace, MalformedAndUnsupportedArtifactsAreRejected) {
-  for (const auto* text : {"", "WRONG 1 1 0\n", "EGALIS_TRACE 2 1 0\n",
+  for (const auto* text : {"", "WRONG 1 1 0\n", "EGALIS_TRACE 3 1 0\n",
        "EGALIS_TRACE 1 2 0\n", "EGALIS_TRACE 1 1 -1\n", "EGALIS_TRACE 1 1 0 extra\n",
        "EGALIS_TRACE 1 1 18446744073709551616\n", "EGALIS_TRACE 1 1 0\n99 0 -\n",
        "EGALIS_TRACE 1 1 0\n1 17 -\n", "EGALIS_TRACE 1 1 0\n1 1 -\n",
@@ -70,6 +72,29 @@ TEST(Trace, ReplayConsumesSavedChoicesWithoutRegeneratingThem) {
   EXPECT_EQ(replay.choose(unrelated_random, 0, 100, "delay"), choice);
   replay.record({DecisionKind::attached, {0, 2}, {}});
   EXPECT_NO_THROW(replay.verify_complete());
+}
+
+TEST(Trace, ProtocolDecisionsRequireV2AndLegacyArtifactsRemainReadable) {
+  TraceData data;
+  data.decisions = {{DecisionKind::protocol, {0, 1}, "result/unsupported"}};
+  EXPECT_EQ(parse_trace(serialize(data)), data);
+  data.version = 1;
+  EXPECT_THROW(static_cast<void>(serialize(data)), std::invalid_argument);
+  EXPECT_THROW(Trace{data}, std::invalid_argument);
+  EXPECT_THROW(static_cast<void>(parse_trace("EGALIS_TRACE 1 1 0\n14 0 -\n")),
+               std::invalid_argument);
+  auto legacy = parse_trace("EGALIS_TRACE 1 1 0\n5 2 0 1 78\n");
+  Trace replay{legacy};
+  replay.record({DecisionKind::attached, {0, 1}, "x"});
+  EXPECT_NO_THROW(replay.verify_complete());
+}
+TEST(Trace, LegacyTransportOnlyNetworkTraceReplaysWithoutProtocolRecords) {
+  Network original;
+  auto legacy = original.trace();
+  legacy.version = 1;
+  Network replay{parse_trace(serialize(legacy)), FaultPolicy{}};
+  EXPECT_NO_THROW(replay.verify_replay_complete());
+  EXPECT_EQ(replay.trace(), legacy);
 }
 
 TEST(Trace, ReplayFailsClosedOnDivergenceAndUnconsumedRecords) {

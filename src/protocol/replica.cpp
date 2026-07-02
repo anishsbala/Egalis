@@ -57,8 +57,11 @@ Effects Replica::arm_timer(InstanceId instance, TimerDelay delay) {
   const TimerGuard guard{instance, found->second.state.ballots.current, {next_timer_}};
   Effects effects;
   effects.reserve(2);
-  if (found->second.timer) effects.push_back(CancelTimer{found->second.timer->token});
-  effects.push_back(ScheduleTimer{guard, delay});
+  // Construct the active alternative directly: no intermediate variant move,
+  // including its inactive message/dependency-set alternatives, is needed.
+  if (found->second.timer)
+    effects.emplace_back(std::in_place_type<CancelTimer>, CancelTimer{found->second.timer->token});
+  effects.emplace_back(std::in_place_type<ScheduleTimer>, ScheduleTimer{guard, delay});
   found->second.timer = guard;
   ++next_timer_;
   return effects;
@@ -69,7 +72,8 @@ Effects Replica::suspend() {
   effects.reserve(instances_.size());
   for (const auto& [id, record] : instances_) {
     (void)id;
-    if (record.timer) effects.push_back(CancelTimer{record.timer->token});
+    if (record.timer)
+      effects.emplace_back(std::in_place_type<CancelTimer>, CancelTimer{record.timer->token});
   }
   for (auto& [id, record] : instances_) { (void)id; record.timer.reset(); }
   active_ = false;

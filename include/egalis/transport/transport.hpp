@@ -16,6 +16,10 @@ class Endpoint {
  public:
   virtual ~Endpoint() = default;
   virtual void receive(const protocol::Envelope& envelope) = 0;
+  // Serialized simulator lifecycle notifications; default inboxes have no state
+  // to invalidate. They do not imply durable protocol recovery.
+  virtual void on_crash() {}
+  virtual void on_restart() {}
 };
 
 // Typed transport contract shared by simulated and future real effect runners.

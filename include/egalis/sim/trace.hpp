@@ -13,7 +13,7 @@ namespace egalis::sim {
 
 enum class DecisionKind : std::uint32_t {
   configured, scheduled, executed, cancelled, random, attached, sent, plan,
-  link, crashed, restarted, delivered, discarded, timer
+  link, crashed, restarted, delivered, discarded, timer, protocol
 };
 struct Decision {
   DecisionKind kind;
@@ -22,7 +22,7 @@ struct Decision {
   bool operator==(const Decision&) const = default;
 };
 struct TraceData {
-  std::uint32_t version = 1;
+  std::uint32_t version = 2;
   std::uint32_t random_version = 1;
   std::uint64_t seed = 0;
   std::vector<Decision> decisions;

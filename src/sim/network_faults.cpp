@@ -43,6 +43,8 @@ void Network::crash(protocol::ReplicaId replica) {
   trace_.record({DecisionKind::crashed, {scheduler_.now().ticks, replica.value(), slot.generation}, {}});
   slot.crashed = true;
   ++slot.generation;
+  try { slot.endpoint->on_crash(); }
+  catch (...) { scheduler_.fail(); throw; }
 }
 
 void Network::restart(protocol::ReplicaId replica) {
@@ -50,7 +52,9 @@ void Network::restart(protocol::ReplicaId replica) {
   auto& slot = endpoints_[replica.value()];
   if (!slot.endpoint || !slot.crashed) throw std::logic_error("only crashed endpoints can restart");
   trace_.record({DecisionKind::restarted, {scheduler_.now().ticks, replica.value(), slot.generation}, {}});
-  // Reactivates the test endpoint. Durable protocol reconstruction is milestone 27.
+  // Reactivates volatile state only. Durable reconstruction remains milestone 27.
+  try { slot.endpoint->on_restart(); }
+  catch (...) { scheduler_.fail(); throw; }
   slot.crashed = false;
 }
 

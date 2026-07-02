@@ -42,6 +42,7 @@ class Network final : public transport::Transport {
                  std::span<const protocol::ReplicaId> right, bool blocked = true);
   void crash(protocol::ReplicaId replica);
   void restart(protocol::ReplicaId replica);
+  void protocol_decision(protocol::ReplicaId replica, std::string detail);
   EventId timer(protocol::ReplicaId replica, Duration delay, std::string label,
                 Scheduler::Callback callback);
   [[nodiscard]] const TraceData& trace() const noexcept { return trace_.data(); }
