@@ -31,3 +31,11 @@ GCC Debug with -Werror configured and built successfully; CTest passed 60/60.
 Four new contract tests cover payload ownership, ordered effects, invalid tokens,
 completion tags and delegation to message validation. No agreement handlers exist.
 Actual dated logs are maintained separately; this is a reconstructed boundary summary.
+
+## C008: serialized shared replica dispatch
+
+GCC Debug with -Werror built successfully; all 67/67 CTest cases passed.
+Seven new tests cover unique local registration, immutable authoritative state,
+canonical map iteration, all eleven unsupported message routes, timer replacement,
+ballot/token guards, stale completions and suspend/resume isolation.
+No preaccept, agreement, recovery or storage transition is implemented.
