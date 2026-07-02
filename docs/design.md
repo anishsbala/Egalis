@@ -1,7 +1,7 @@
 # Egalis design proposal
 
-Status: milestone 4 source boundary; consensus is not implemented.
-Implemented scope: Foundation types, KV semantics, and the baseline-only message/transition contract. Decisions
+Status: milestone 5 source boundary; consensus is not implemented.
+Implemented scope: Foundation/message contracts plus the logical-time scheduler and typed simulated transport. Decisions
 below distinguish the selected algorithm from engineering extensions. Changes to
 the algorithm require an explicit design revision and new counterexample tests.
 

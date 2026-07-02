@@ -10,6 +10,7 @@ execution logs are retained separately from these trees.
 | 2 | 6/6 |
 | 3 | 10/10 |
 | 4 | 19/19 |
+| 5 | 30/30 |
 
 Each boundary is configured, built and tested in isolation with CMake/Ninja,
 GCC, pinned GoogleTest and `-Werror`. The final boundary also requires Release

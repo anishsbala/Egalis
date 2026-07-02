@@ -2,8 +2,8 @@
 
 ## Current coverage
 
-This boundary contains 19 GoogleTests, including the original C++20 build
-contract. Implemented scope: Foundation types, KV semantics, and the baseline-only message/transition contract.
+This boundary contains 30 GoogleTests, including the original C++20 build
+contract. Implemented scope: Foundation/message contracts plus the logical-time scheduler and typed simulated transport.
 Agreement/recovery and durable protocol behavior are not implemented or tested.
 
 ## Behavioral testing layers
