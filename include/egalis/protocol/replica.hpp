@@ -30,6 +30,9 @@ class Replica {
   Replica& operator=(Replica&&) = delete;
 
   DispatchResult dispatch(const Event& event);
+  // Pure queries: they do not register, preaccept, vote, or execute anything.
+  [[nodiscard]] Dependencies known_dependencies(InstanceId instance,
+                                                 const kv::Command& command) const;
   // Mechanism only: no grace/recovery timeout policy is selected here.
   Effects arm_timer(InstanceId instance, TimerDelay delay);
   Effects suspend();

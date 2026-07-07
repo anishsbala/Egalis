@@ -16,14 +16,15 @@ bool conflicts(const Command& left, const Command& right) {
 }
 
 bool conflicts(const Payload& left, const Payload& right) {
-  if (std::holds_alternative<std::monostate>(left) ||
-      std::holds_alternative<std::monostate>(right)) {
-    return false;
-  }
-  if (std::holds_alternative<Nop>(left) || std::holds_alternative<Nop>(right)) {
-    return true;
-  }
-  return conflicts(std::get<Command>(left), std::get<Command>(right));
+  if (std::holds_alternative<std::monostate>(right)) return false;
+  if (std::holds_alternative<Nop>(right))
+    return !std::holds_alternative<std::monostate>(left);
+  return conflicts(left, std::get<Command>(right));
+}
+
+bool conflicts(const Payload& left, const Command& right) {
+  if (const auto* command = std::get_if<Command>(&left)) return conflicts(*command, right);
+  return std::holds_alternative<Nop>(left);
 }
 
 std::optional<std::string> StateMachine::read(const std::string& key) const {

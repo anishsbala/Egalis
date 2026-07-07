@@ -55,3 +55,16 @@ Post-commit Release initially stopped under -Werror on a maybe-uninitialized
 diagnostic in an intermediate effect-variant move. Constructing timer/cancellation
 alternatives directly in the vector removed the unnecessary move without weakening
 compiler flags. After this integration fix, Debug and Release both passed 83/83.
+
+## C010: complete known-conflict scans
+
+Full GCC Debug and Release suites with -Werror passed 91/91 each.
+Eight new tests cover empty/unknown targets, KV conflicts, exact self exclusion,
+all phases and ballots, retained committed commands, Nop/bottom, all 24 insertion
+orders, allocation-free command queries and live-table ownership.
+The read-only oracle follows EPaxos* v1 Figure 3 lines 3/9. No vote, preaccept,
+state mutation, conflict index or pruning is introduced. The existing sixteen-seed
+core replay and fault-injection suites remain included in the full test runs.
+The exact staged tree is also required to pass isolated Debug/Release builds and
+91/91 tests before this boundary is committed; actual dated logs are retained
+separately from these reconstructed metadata dates.

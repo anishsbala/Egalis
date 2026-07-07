@@ -30,6 +30,8 @@ using Payload = std::variant<std::monostate, Nop, Command>;
 
 [[nodiscard]] bool conflicts(const Command& left, const Command& right);
 [[nodiscard]] bool conflicts(const Payload& left, const Payload& right);
+// Avoid copying a command into a Payload while scanning known protocol records.
+[[nodiscard]] bool conflicts(const Payload& left, const Command& right);
 
 struct GetResult {
   std::optional<std::string> value;
