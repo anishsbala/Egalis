@@ -16,13 +16,13 @@ TEST(Replica, SubmissionReservesExactlyOneInitialRecordWithoutVoting) {
   Replica replica{local};
   const auto result = replica.dispatch(submit());
   EXPECT_EQ(result.status, DispatchStatus::processed);
-  ASSERT_EQ(result.effects.size(), 1U);
+  ASSERT_EQ(result.effects.size(), 6U);
   EXPECT_EQ(std::get<SubmissionRegistered>(result.effects.front()).instance, id);
   ASSERT_EQ(replica.instances().size(), 1U);
   const auto& state = replica.instances().at(id).state;
   EXPECT_EQ(state.phase, Phase::initial);
   EXPECT_EQ(state.command, (kv::Payload{submit().command}));
-  EXPECT_FALSE(state.initial_command);
+  EXPECT_EQ(state.initial_command, submit().command);
   EXPECT_TRUE(state.dependencies.empty());
   EXPECT_TRUE(state.ballots.current.initial());
 }

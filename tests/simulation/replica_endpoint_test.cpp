@@ -56,10 +56,10 @@ TEST(ReplicaEndpoint, EndpointDispatchUsesTheSameCoreAndNeverVotesYet) {
   auto& source = ReplicaEndpoint::attach(network, local);
   auto& target = ReplicaEndpoint::attach(network, ReplicaId{1});
   source.dispatch(submission());
-  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::processed);
+  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::unsupported);  // Self-PreAccept pending C013.
   source.execute(sends({message(0, 1)}));
   EXPECT_EQ(target.dispatch_count(), 0U);
-  EXPECT_EQ(network.scheduler().run(), 1U);
+  EXPECT_EQ(network.scheduler().run(), 5U);  // Four PreAccepts plus the explicit Waiting.
   EXPECT_EQ(target.last_status(), protocol::DispatchStatus::unsupported);
   EXPECT_TRUE(target.core().instances().empty());
   EXPECT_EQ(source.core().instances().at(id).state.phase, protocol::Phase::initial);
@@ -106,6 +106,8 @@ TEST(ReplicaEndpoint, TimerReplacementAndStaleCallbacksCannotConsumeTheCurrentTi
   Network network;
   auto& endpoint = ReplicaEndpoint::attach(network, local);
   endpoint.dispatch(submission());
+  network.scheduler().run();  // Finish submission traffic before isolating timer behavior.
+  const auto start = network.scheduler().now();
   endpoint.arm_timer(id, {9});
   const auto old = *endpoint.core().instances().at(id).timer;
   endpoint.arm_timer(id, {1});
@@ -114,7 +116,7 @@ TEST(ReplicaEndpoint, TimerReplacementAndStaleCallbacksCannotConsumeTheCurrentTi
   EXPECT_EQ(endpoint.last_status(), protocol::DispatchStatus::stale);
   EXPECT_EQ(endpoint.core().instances().at(id).timer, current);
   EXPECT_EQ(network.scheduler().run(), 1U);
-  EXPECT_EQ(network.scheduler().now(), LogicalTime{1});
+  EXPECT_EQ(network.scheduler().now(), after(start, Duration{1}));
   EXPECT_EQ(endpoint.last_status(), protocol::DispatchStatus::unsupported);
   EXPECT_FALSE(endpoint.core().instances().at(id).timer);
 }
@@ -123,6 +125,7 @@ TEST(ReplicaEndpoint, CrashCancelsTimersAndOldDeliveriesStayStaleAfterRestart) {
   auto& endpoint = ReplicaEndpoint::attach(network, local);
   ReplicaEndpoint::attach(network, ReplicaId{1});
   endpoint.dispatch(submission());
+  network.scheduler().run();
   endpoint.arm_timer(id, {4});
   const auto old = *endpoint.core().instances().at(id).timer;
   network.send(message(1, 0), DeliveryPlan{false, {3}, false, {3}});
@@ -146,9 +149,11 @@ TEST(ReplicaEndpoint, DuplicateDeliveryDoesNotAllocateOrMutateProtocolRecords) {
   ReplicaEndpoint::attach(network, local);
   auto& target = ReplicaEndpoint::attach(network, ReplicaId{1});
   target.dispatch(submission(InstanceId{1, ReplicaId{1}}));
+  network.scheduler().run();
+  const auto before = target.dispatch_count();
   network.send(message(0, 1), DeliveryPlan{false, {0}, true, {0}});
   EXPECT_EQ(network.scheduler().run(), 2U);
-  EXPECT_EQ(target.dispatch_count(), 3U);
+  EXPECT_EQ(target.dispatch_count(), before + 2);
   EXPECT_EQ(target.core().instances().size(), 1U);
   EXPECT_EQ(target.core().instances().begin()->second.state.phase, protocol::Phase::initial);
 }
@@ -222,5 +227,28 @@ TEST(ReplicaEndpoint, RestartHookFailureAlsoStopsNetwork) {
   network.crash(local);
   EXPECT_THROW(network.restart(local), std::runtime_error);
   EXPECT_TRUE(network.scheduler().failed());
+}
+TEST(ReplicaEndpoint, AllocatedSubmissionInputsReplayAndResumeWithoutIdReuse) {
+  const auto run = [](Network& network) {
+    auto& endpoint = ReplicaEndpoint::attach(network, local);
+    const std::string key{"k\0x", 3};
+    endpoint.dispatch(protocol::SubmitCommand{kv::Put{key, "v"}});
+    network.scheduler().run();
+    network.crash(local);
+    network.restart(local);
+    endpoint.dispatch(protocol::SubmitCommand{kv::Get{key}});
+    network.scheduler().run();
+    ASSERT_EQ(endpoint.core().instances().size(), 2U);
+    EXPECT_TRUE(endpoint.core().instances().contains(InstanceId{1, local}));
+    EXPECT_TRUE(endpoint.core().instances().contains(InstanceId{2, local}));
+    EXPECT_EQ(endpoint.core().instances().at(InstanceId{2, local}).state.initial_dependencies,
+              (protocol::Dependencies{InstanceId{1, local}}));
+    network.verify_replay_complete();
+  };
+  Network original; run(original);
+  Network repeated; run(repeated);
+  EXPECT_EQ(original.trace(), repeated.trace());
+  Network replay{parse_trace(serialize(original.trace())), FaultPolicy{}}; run(replay);
+  EXPECT_EQ(original.trace(), replay.trace());
 }
 }  // namespace egalis::sim

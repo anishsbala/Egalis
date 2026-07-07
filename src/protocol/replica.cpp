@@ -19,13 +19,27 @@ DispatchResult Replica::handle(const Submit& input) {
     throw std::invalid_argument("submission instance is not locally owned");
   if (instances_.contains(input.instance))
     throw std::invalid_argument("submission reuses an instance ID");
-  // Reserve a local proposal, NOT a preaccept vote. initCmd/initDep and phase
-  // changes are the responsibility of the later baseline transition handlers.
+  const auto proposed = known_dependencies(input.instance, input.command);
+  // Frozen pending self-PreAccept metadata, not a vote. The runner must finish
+  // the local effect before remote effects; C013 supplies the receive handler.
   InstanceRecord record;
   record.state.command = input.command;
+  record.state.initial_command = input.command;
+  record.state.initial_dependencies = proposed;
   DispatchResult result{DispatchStatus::processed, {SubmissionRegistered{input.instance}}};
+  result.effects.reserve(1 + Configuration::replicas);
+  const auto send = [&](ReplicaId destination) {
+    result.effects.emplace_back(std::in_place_type<SendMessage>,
+        SendMessage{{id_, destination, PreAccept{input.instance, input.command, proposed}}});
+  };
+  send(id_);
+  for (const auto member : members()) if (member != id_) send(member);
   instances_.emplace(input.instance, std::move(record));
+  allocator_.observe(input.instance);
   return result;
+}
+DispatchResult Replica::handle(const SubmitCommand& input) {
+  return handle(Submit{allocator_.next(), input.command});
 }
 DispatchResult Replica::handle(const PeerMessage& input) {
   if (input.envelope.destination != id_)

@@ -213,7 +213,7 @@ TEST(Dependencies, UnsupportedCandidateChangesCannotAlterTheLiveOracle) {
     EXPECT_TRUE(result.effects.empty());
     EXPECT_EQ(replica.expand_dependencies(target, get(), proposed), before);
     EXPECT_EQ(replica.instances().at(id(1)).state.command, (kv::Payload{put()}));
-    EXPECT_FALSE(replica.instances().at(id(1)).state.initial_command);
+    EXPECT_EQ(replica.instances().at(id(1)).state.initial_command, put());
   }
 }
 }  // namespace egalis::protocol

@@ -52,6 +52,7 @@ void scenario(Network& network) {
   replicas[0]->dispatch(protocol::Submit{InstanceId{4, ReplicaId{0}}, kv::Get{"unrelated"}});
   EXPECT_EQ(replicas[0]->core().known_dependencies(InstanceId{9, ReplicaId{0}}, read),
             (Dependencies{InstanceId{1, ReplicaId{0}}}));
+  network.scheduler().run(1000);
   network.verify_replay_complete();
 }
 }
@@ -75,10 +76,11 @@ TEST(DependencySimulation, EqualTimeSubmissionsExposeOnlyPreviouslyKnownConflict
     observed.push_back(replica.core().expand_dependencies(target, write, {}));
     EXPECT_EQ(network.trace(), before);
   });
-  EXPECT_EQ(network.scheduler().run(), 3U);
+  for (int i = 0; i < 3; ++i) EXPECT_TRUE(network.scheduler().step());
   EXPECT_EQ(observed, (std::vector<Dependencies>{{}, {first}, {first, second}}));
   EXPECT_EQ(replica.core().instances().at(second).state.phase, protocol::Phase::initial);
   EXPECT_TRUE(replica.core().instances().at(second).state.dependencies.empty());
+  network.scheduler().run();
 }
 TEST(DependencySimulation, FaultedLiveCoreQueriesPreserveSeededTracesAndReplay) {
   const FaultPolicy policy{{1}, {5}, 200000, 700000, {1}};

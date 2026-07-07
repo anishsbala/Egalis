@@ -81,3 +81,13 @@ metadata is preserved; cmd, not initCmd, remains the dependency predicate.
 The exact staged tree must also pass isolated Debug/Release builds and 99/99 tests
 before committing. No preaccept, accept, recovery or execution handler is added.
 Actual dated verification is retained separately from reconstructed commit dates.
+
+## C012: checked submission and allocation
+
+Working Debug and Release builds with -Werror passed 104/104 tests each.
+Five new cases exercise local allocation, reserved-ID rejection/high-water marks,
+last-ID exhaustion, frozen proposals, suspend/resume and allocated-input trace replay.
+Existing assertions now account for five PreAccept effects and frozen metadata;
+no test case is removed. Receiver-side voting is still unsupported in this slice.
+The exact staged export must pass both configurations before committing.
+Actual dated execution records remain separate from reconstructed commit dates.

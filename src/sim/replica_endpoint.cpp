@@ -12,13 +12,18 @@ std::string guard_text(const TimerGuard& guard) {
   return std::to_string(guard.instance.number()) + "/" +
          std::to_string(guard.ballot.number()) + "/" + std::to_string(guard.token.value);
 }
-std::string fingerprint(const Event& event) {
-  return std::visit([](const auto& input) -> std::string {
+std::string fingerprint(const Event& event, ReplicaId replica) {
+  return std::visit([replica](const auto& input) -> std::string {
     using T = std::decay_t<decltype(input)>;
     if constexpr (std::is_same_v<T, Submit>) {
       // Reuse command byte framing, not a wire message or simulated preaccept.
       return "submit/" + canonical(Envelope{input.instance.coordinator(),
           input.instance.coordinator(), PreAccept{input.instance, input.command, {}}});
+    } else if constexpr (std::is_same_v<T, SubmitCommand>) {
+      // Synthetic ID frames command bytes only; actual allocation is recorded
+      // by SubmissionRegistered and the resulting PreAccept effects.
+      return "submit-command/" + canonical(Envelope{replica, replica,
+          PreAccept{InstanceId{1, replica}, input.command, {}}});
     } else if constexpr (std::is_same_v<T, PeerMessage>) {
       return "peer/" + canonical(input.envelope);
     } else if constexpr (std::is_same_v<T, TimerFired>) {
@@ -74,7 +79,7 @@ void ReplicaEndpoint::dispatch_one(const protocol::Event& event) {
   if (dispatch_count_ == std::numeric_limits<std::uint64_t>::max())
     throw std::overflow_error("dispatch counter exhausted");
   try {
-    network_.protocol_decision(core_.id(), "input/" + fingerprint(event));
+    network_.protocol_decision(core_.id(), "input/" + fingerprint(event, core_.id()));
     auto result = core_.dispatch(event);
     last_status_ = result.status;
     ++dispatch_count_;

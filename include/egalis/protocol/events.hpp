@@ -34,6 +34,12 @@ struct Submit {
   kv::Command command;
   bool operator==(const Submit&) const = default;
 };
+// Normal client input. Submit above supports explicitly preallocated local IDs;
+// both forms take the same coordinator path, never bypassing PreAccept.
+struct SubmitCommand {
+  kv::Command command;
+  bool operator==(const SubmitCommand&) const = default;
+};
 struct PeerMessage {
   Envelope envelope;
   bool operator==(const PeerMessage&) const = default;
@@ -52,7 +58,7 @@ struct Completed {
   CompletionStatus status;
   bool operator==(const Completed&) const = default;
 };
-using Event = std::variant<Submit, PeerMessage, TimerFired, Completed>;
+using Event = std::variant<Submit, PeerMessage, TimerFired, Completed, SubmitCommand>;
 
 struct SendMessage {
   Envelope envelope;

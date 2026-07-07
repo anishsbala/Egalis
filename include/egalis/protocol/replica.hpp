@@ -1,6 +1,7 @@
 #pragma once
 
 #include "egalis/protocol/events.hpp"
+#include "egalis/protocol/instance_allocator.hpp"
 
 #include <map>
 #include <optional>
@@ -23,7 +24,8 @@ struct InstanceRecord {
 // only after dispatch returns, so synchronous self-delivery cannot reenter mutation.
 class Replica {
  public:
-  explicit Replica(ReplicaId id) : id_(id) {}
+  explicit Replica(ReplicaId id, std::uint64_t first_instance = 1)
+      : id_(id), allocator_(id, first_instance) {}
   Replica(const Replica&) = delete;
   Replica& operator=(const Replica&) = delete;
   Replica(Replica&&) = delete;
@@ -47,10 +49,12 @@ class Replica {
  private:
   void require_active() const;
   DispatchResult handle(const Submit& input);
+  DispatchResult handle(const SubmitCommand& input);
   DispatchResult handle(const PeerMessage& input);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);
   ReplicaId id_;
+  InstanceAllocator allocator_;
   std::map<InstanceId, InstanceRecord> instances_;
   std::uint64_t next_timer_ = 1;
   bool active_ = true;
