@@ -68,6 +68,7 @@ TEST(Dependencies, BottomIsAbsentButNopConflictsAcrossKeys) {
   Table table;
   table.emplace(id(1), record(std::monostate{}));
   table.emplace(id(2), record(kv::Nop{}, Phase::committed));
+  table.at(id(2)).state.ballots = {Ballot::recovery(1, local), Ballot::recovery(1, local)};
   table.emplace(id(3), record(put("different")));
   EXPECT_EQ(scan_known_dependencies(table, target, get()), (Dependencies{id(2)}));
   EXPECT_EQ(scan_known_dependencies(table, id(2), get()), (Dependencies{}));
@@ -109,5 +110,110 @@ TEST(Dependencies, ReplicaQueriesUseTheLiveTableAndReturnIndependentSets) {
   replica.suspend();
   EXPECT_EQ(replica.known_dependencies(target, get()), (Dependencies{id(1), id(2)}));
   replica.resume();
+}
+TEST(Dependencies, ExpansionPreservesUnknownAndNonconflictingCoordinatorKnowledge) {
+  Table table;
+  table.emplace(id(1), record(put()));
+  table.emplace(id(2), record(put("other")));
+  const Dependencies proposed{id(2), id(7, 4)};
+  const auto result = expand_known_dependencies(table, target, get(), proposed);
+  EXPECT_EQ(result, (Dependencies{id(1), id(2), id(7, 4)}));
+  EXPECT_EQ(proposed, (Dependencies{id(2), id(7, 4)}));
+  EXPECT_EQ(expand_known_dependencies(table, target, get(), {}),
+            scan_known_dependencies(table, target, get()));
+  EXPECT_EQ(expand_known_dependencies({}, target, get(), proposed), proposed);
+}
+TEST(Dependencies, InvalidSelfProposalIsRejectedWithoutChangingKnowledge) {
+  Replica replica{local};
+  replica.dispatch(Submit{id(1), put()});
+  const Dependencies proposed{target, id(1)};
+  EXPECT_THROW(static_cast<void>(replica.expand_dependencies(target, get(), proposed)),
+               std::invalid_argument);
+  EXPECT_EQ(proposed, (Dependencies{target, id(1)}));
+  EXPECT_FALSE(replica.instances().contains(target));
+  EXPECT_EQ(replica.known_dependencies(target, get()), (Dependencies{id(1)}));
+  EXPECT_TRUE(replica.instances().at(id(1)).state.dependencies.empty());
+}
+TEST(Dependencies, CandidateNopKeepsVisibilityAndQueriesPreserveAllInitialMetadata) {
+  Table table;
+  auto& entry = table.emplace(id(1), record(put(), Phase::preaccepted)).first->second;
+  entry.state.initial_command = put();
+  entry.state.initial_dependencies = {id(7, 1)};
+  entry.state.dependencies = {id(7, 1), id(8, 2)};
+  entry.timer = TimerGuard{id(1), {}, {7}};
+  const auto initial_command = entry.state.initial_command;
+  const auto initial_dependencies = entry.state.initial_dependencies;
+  for (const auto phase : {Phase::preaccepted, Phase::accepted, Phase::committed}) {
+    entry.state.phase = phase;
+    if (phase != Phase::preaccepted) {
+      entry.state.ballots = {Ballot::recovery(1, local), Ballot::recovery(1, local)};
+      entry.timer->ballot = entry.state.ballots.current;
+      entry.state.command = kv::Nop{};
+      entry.state.dependencies.clear();  // Recovery's Nop proposal has an empty dep.
+    }
+    const auto command = entry.state.command;
+    const auto dependencies = entry.state.dependencies;
+    const auto ballots = entry.state.ballots;
+    const auto timer = entry.timer;
+    EXPECT_EQ(expand_known_dependencies(table, target, get(), {}), (Dependencies{id(1)}));
+    // Looking only at the original key would lose Nop's conflicts with other keys.
+    EXPECT_EQ(expand_known_dependencies(table, target, get("other"), {}),
+              phase == Phase::preaccepted ? Dependencies{} : Dependencies{id(1)});
+    EXPECT_EQ(entry.state.command, command);
+    EXPECT_EQ(entry.state.initial_command, initial_command);
+    EXPECT_EQ(entry.state.initial_dependencies, initial_dependencies);
+    EXPECT_EQ(entry.state.dependencies, dependencies);
+    EXPECT_EQ(entry.state.phase, phase);
+    EXPECT_EQ(entry.state.ballots.current, ballots.current);
+    EXPECT_EQ(entry.state.ballots.accepted, ballots.accepted);
+    EXPECT_EQ(entry.timer, timer);
+  }
+  // The fixture describes candidate records, not an implementation/test of the
+  // corresponding recovery transitions (which remain later milestones).
+}
+TEST(Dependencies, ValidatedInitialRecordsAreVisibleButBottomIsNot) {
+  Table table;
+  auto& validated = table.emplace(id(1), record(put())).first->second;
+  validated.state.initial_command = put();
+  validated.state.initial_dependencies = {id(7, 1)};
+  validated.state.ballots.current = Ballot::recovery(1, local);
+  // Figure 5 validation may leave phase initial and abal zero. No phase filter
+  // may erase its cmd knowledge. An untouched initial bottom record is different.
+  table.emplace(id(2), record(std::monostate{}));
+  EXPECT_EQ(expand_known_dependencies(table, target, get(), {}), (Dependencies{id(1)}));
+  EXPECT_EQ(validated.state.phase, Phase::initial);
+  EXPECT_TRUE(validated.state.ballots.accepted.initial());
+  EXPECT_EQ(validated.state.initial_dependencies, (Dependencies{id(7, 1)}));
+  EXPECT_EQ(validated.state.initial_command, put());
+}
+TEST(Dependencies, ExpansionIsNotTransitiveClosureAndDoesNotOverwriteStoredProposals) {
+  Table table;
+  auto& known = table.emplace(id(1), record(put(), Phase::preaccepted)).first->second;
+  known.state.initial_command = put();
+  known.state.initial_dependencies = {id(7, 1)};
+  known.state.dependencies = {id(4), id(7, 1)};
+  table.emplace(id(4), record(get("other")));
+  const Dependencies proposed{id(8, 3)};
+  EXPECT_EQ(expand_known_dependencies(table, target, get(), proposed),
+            (Dependencies{id(1), id(8, 3)}));
+  EXPECT_EQ(known.state.dependencies, (Dependencies{id(4), id(7, 1)}));
+  EXPECT_EQ(known.state.initial_dependencies, (Dependencies{id(7, 1)}));
+}
+TEST(Dependencies, UnsupportedCandidateChangesCannotAlterTheLiveOracle) {
+  Replica replica{local};
+  replica.dispatch(Submit{id(1), put()});
+  const auto ballot = Ballot::recovery(1, local);
+  const Dependencies proposed{id(7, 4)};
+  const auto before = replica.expand_dependencies(target, get(), proposed);
+  for (const Message& message : std::vector<Message>{
+      Accept{ballot, id(1), kv::Nop{}, {}}, Commit{ballot, id(1), kv::Nop{}, {}},
+      Validate{ballot, id(1), put("other"), {}}}) {
+    const auto result = replica.dispatch(PeerMessage{{local, local, message}});
+    EXPECT_EQ(result.status, DispatchStatus::unsupported);
+    EXPECT_TRUE(result.effects.empty());
+    EXPECT_EQ(replica.expand_dependencies(target, get(), proposed), before);
+    EXPECT_EQ(replica.instances().at(id(1)).state.command, (kv::Payload{put()}));
+    EXPECT_FALSE(replica.instances().at(id(1)).state.initial_command);
+  }
 }
 }  // namespace egalis::protocol

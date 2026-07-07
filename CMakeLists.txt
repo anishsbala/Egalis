@@ -54,7 +54,8 @@ if(BUILD_TESTING)
   gtest_discover_tests(egalis_unit_tests)
   add_executable(egalis_sim_tests tests/simulation/scheduler_test.cpp tests/simulation/network_test.cpp
                                 tests/simulation/trace_test.cpp tests/simulation/faults_test.cpp
-                                tests/simulation/replica_endpoint_test.cpp)
+                                tests/simulation/replica_endpoint_test.cpp
+                                tests/simulation/dependencies_test.cpp)
   target_link_libraries(egalis_sim_tests PRIVATE egalis_sim GTest::gtest_main)
   gtest_discover_tests(egalis_sim_tests)
 endif()

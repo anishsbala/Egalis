@@ -21,3 +21,29 @@ the existing command-key comparisons; ordered insertion uses an end hint.
 
 This milestone does not invoke preaccept, emit votes, initialize initial metadata,
 or mutate stored dependency proposals. Those transitions remain milestone 9.
+
+## Proposal expansion and candidate visibility
+
+expand_known_dependencies and Replica::expand_dependencies return the Figure 3
+line 9 union: proposed dependencies plus the current known-conflict scan. They
+preserve proposed IDs even if unknown locally or currently nonconflicting. They
+reject a proposed self dependency instead of silently dropping it. This is a value
+computation only, not preaccept; neither the input proposal nor stored dep/initDep
+is modified, and transitive closure is not computed here.
+
+The dependency predicate remains current cmd, not initCmd. Initial metadata is
+retained unchanged for future recovery-specific predicates; it is not a second
+payload index. [Figure 9, Invariant 6](https://arxiv.org/html/2511.02743v1#A4.SS1)
+states that after preaccept/validation the current payload remains the original
+command or becomes Nop. Nop's conflicts therefore keep the instance visible even
+to commands on unrelated keys. A validated initial-phase record with a real cmd
+is visible too; untouched bottom records are not. No phase/ballot filter, cached
+scan, or pruning may erase this knowledge. Keeping initial metadata does not mean
+unioning initial dependency sets into every query or substituting initCmd for cmd.
+
+Cross-phase fixtures describe records only, not implemented recovery transitions.
+They verify that querying does not alter command, initial metadata, dep, phase,
+ballots or timer guards. Integration tests query the same Replica through simulated
+endpoints under ties, duplicates, loss, partitions, crash/restart and replay. Peer
+consensus messages still return unsupported, so they cannot install candidate
+changes ahead of milestone 9 and later recovery/accept milestones.

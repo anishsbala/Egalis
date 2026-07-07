@@ -68,3 +68,16 @@ core replay and fault-injection suites remain included in the full test runs.
 The exact staged tree is also required to pass isolated Debug/Release builds and
 91/91 tests before this boundary is committed; actual dated logs are retained
 separately from these reconstructed metadata dates.
+
+## C011: dependency visibility across candidate changes
+
+Full GCC Debug and Release suites with -Werror passed 99/99 each.
+Six new unit cases verify proposal unions, unknown IDs, self-dependency rejection,
+retained initial metadata through Nop records, validated initial-phase knowledge,
+absence of transitive expansion, and unsupported candidate changes. Two simulator
+cases cover equal-time knowledge ordering and eight seeded five-replica fault
+scenarios, each repeated and replayed from serialized traces. Original protocol
+metadata is preserved; cmd, not initCmd, remains the dependency predicate.
+The exact staged tree must also pass isolated Debug/Release builds and 99/99 tests
+before committing. No preaccept, accept, recovery or execution handler is added.
+Actual dated verification is retained separately from reconstructed commit dates.
