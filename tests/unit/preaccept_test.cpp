@@ -67,8 +67,8 @@ TEST(PreAcceptTransition, PhaseGuardPreventsSecondTransition) {
   const auto first = replica.dispatch(request(proposal()));
   const auto before = replica.instances().at(id).state.dependencies;
   const auto duplicate = replica.dispatch(request(proposal()));
-  EXPECT_EQ(duplicate.status, DispatchStatus::stale);
-  EXPECT_TRUE(duplicate.effects.empty());
+  EXPECT_EQ(duplicate.status, DispatchStatus::replayed);
+  EXPECT_EQ(duplicate.effects, first.effects);
   EXPECT_EQ(replica.instances().at(id).state.phase, Phase::preaccepted);
   EXPECT_EQ(replica.instances().at(id).state.dependencies, before);
   EXPECT_EQ(first.effects.size(), 1U);
@@ -84,5 +84,81 @@ TEST(PreAcceptTransition, SameKeyReadsRemainCommuting) {
   replica.dispatch(Submit{InstanceId{1, receiver}, kv::Get{"k"}});
   replica.dispatch(request({id, kv::Get{"k"}, {}}));
   EXPECT_TRUE(replica.instances().at(id).state.dependencies.empty());
+}
+TEST(PreAcceptTransition, ReplaysOriginalReplyAfterNewConflictsWithoutTouchingTimersOrMetadata) {
+  Replica replica{receiver};
+  const auto first = replica.dispatch(request(proposal()));
+  replica.arm_timer(id, {10});
+  replica.dispatch(request({InstanceId{1, ReplicaId{2}}, kv::Put{"k", "new"}, {}}));
+  const auto before = replica.instances().at(id);
+  EXPECT_FALSE(replica.known_dependencies(id, proposal().command).empty());
+  for (int i = 0; i < 3; ++i) {
+    const auto replay = replica.dispatch(request(proposal()));
+    EXPECT_EQ(replay.status, DispatchStatus::replayed);
+    EXPECT_EQ(replay.effects, first.effects);
+    const auto& after = replica.instances().at(id);
+    EXPECT_EQ(after.state.command, before.state.command);
+    EXPECT_EQ(after.state.dependencies, before.state.dependencies);
+    EXPECT_EQ(after.state.initial_command, before.state.initial_command);
+    EXPECT_EQ(after.state.initial_dependencies, before.state.initial_dependencies);
+    EXPECT_EQ(after.state.ballots.current, before.state.ballots.current);
+    EXPECT_EQ(after.state.ballots.accepted, before.state.ballots.accepted);
+    EXPECT_EQ(after.state.phase, before.state.phase);
+    EXPECT_EQ(after.timer, before.timer);
+    EXPECT_EQ(replica.instances().size(), 2U);
+  }
+}
+TEST(PreAcceptTransition, RejectsConflictingDuplicatesWithoutChangingTheOriginalVote) {
+  Replica replica{receiver};
+  const PreAccept original{id, kv::Put{"k", "v"}, {InstanceId{7, ReplicaId{4}}}};
+  const auto first = replica.dispatch(request(original));
+  auto different = original;
+  different.command = kv::Put{"k", "changed"};
+  EXPECT_EQ(replica.dispatch(request(different)).status, DispatchStatus::rejected);
+  different = original;
+  different.dependencies.clear();
+  const auto rejected = replica.dispatch(request(different));
+  EXPECT_EQ(rejected.status, DispatchStatus::rejected);
+  EXPECT_TRUE(rejected.effects.empty());
+  different.dependencies.insert(id);
+  EXPECT_THROW(replica.dispatch(request(different)), std::invalid_argument);
+  EXPECT_THROW(replica.dispatch(PeerMessage{{receiver, receiver, original}}), std::invalid_argument);
+  const auto replay = replica.dispatch(request(original));
+  EXPECT_EQ(replay.effects, first.effects);
+  EXPECT_EQ(replica.instances().at(id).state.initial_dependencies, original.dependencies);
+  EXPECT_EQ(replica.instances().at(id).state.command, (kv::Payload{original.command}));
+}
+TEST(PreAcceptTransition, ReplayGuardRejectsAdvancedBallotsPhasesAndIncompleteMetadata) {
+  InstanceState state;
+  const auto original = proposal();
+  state.command = original.command;
+  state.initial_command = original.command;
+  state.initial_dependencies = original.dependencies;
+  for (auto phase : {Phase::initial, Phase::preaccepted, Phase::accepted, Phase::committed}) {
+    state.phase = phase;
+    EXPECT_EQ(preaccept_reply_replayable(state, original), phase == Phase::preaccepted);
+    state.ballots.current = Ballot::recovery(1, receiver);
+    EXPECT_FALSE(preaccept_reply_replayable(state, original));
+    state.ballots.current = {};
+  }
+  state.phase = Phase::preaccepted;
+  state.initial_command.reset();
+  EXPECT_FALSE(preaccept_reply_replayable(state, original));
+  state.initial_command = original.command;
+  state.command = kv::Nop{};  // An inconsistent preaccepted record must not leak a reply.
+  EXPECT_FALSE(preaccept_reply_replayable(state, original));
+}
+TEST(PreAcceptTransition, VolatileResumeRetainsReplyAndIdenticalPayloadsHaveDistinctIds) {
+  Replica replica{receiver};
+  const auto first = replica.dispatch(request(proposal()));
+  replica.suspend();
+  EXPECT_THROW(replica.dispatch(request(proposal())), std::logic_error);
+  replica.resume();
+  EXPECT_EQ(replica.dispatch(request(proposal())).effects, first.effects);
+  auto other = proposal();
+  other.id = InstanceId{2, owner};
+  EXPECT_EQ(replica.dispatch(request(other)).status, DispatchStatus::processed);
+  EXPECT_EQ(replica.instances().size(), 2U);
+  EXPECT_EQ(replica.instances().at(other.id).state.dependencies, (Dependencies{id}));
 }
 }  // namespace egalis::protocol

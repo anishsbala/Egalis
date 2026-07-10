@@ -45,4 +45,15 @@ TEST(ReplicaContract, MessageValidationIsNotBypassed) {
   EXPECT_THROW(validate(Event{PeerMessage{malformed}}), std::invalid_argument);
   EXPECT_THROW(validate(Effect{SendMessage{malformed}}), std::invalid_argument);
 }
+TEST(ReplicaContract, InPlaceSendOwnsTheConcreteMessageAndItsDependencies) {
+  Dependencies dependencies{InstanceId{2, ReplicaId{1}}};
+  Effects effects;
+  effects.emplace_back(std::in_place_type<SendMessage>, ReplicaId{1}, ReplicaId{0},
+      std::in_place_type<PreAcceptOk>, id, dependencies);
+  dependencies.clear();
+  const auto& reply = std::get<SendMessage>(effects[0]).envelope;
+  EXPECT_EQ(reply, (Envelope{ReplicaId{1}, ReplicaId{0},
+      PreAcceptOk{id, {InstanceId{2, ReplicaId{1}}}}}));
+  EXPECT_NO_THROW(validate(reply));
+}
 }  // namespace egalis::protocol

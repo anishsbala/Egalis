@@ -8,7 +8,7 @@
 
 namespace egalis::protocol {
 
-enum class DispatchStatus { processed, unsupported, stale, rejected };
+enum class DispatchStatus { processed, unsupported, stale, rejected, replayed };
 struct DispatchResult {
   DispatchStatus status;
   Effects effects;

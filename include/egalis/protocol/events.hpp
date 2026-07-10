@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <variant>
 #include <vector>
+#include <utility>
 
 namespace egalis::protocol {
 
@@ -62,6 +63,13 @@ using Event = std::variant<Submit, PeerMessage, TimerFired, Completed, SubmitCom
 
 struct SendMessage {
   Envelope envelope;
+  explicit SendMessage(Envelope value) : envelope(std::move(value)) {}
+  // Construct both variants' active alternatives in place, avoiding temporary
+  // nested variant moves and extra dependency/payload copies.
+  template<class M, class... Args>
+  SendMessage(ReplicaId source, ReplicaId destination, std::in_place_type_t<M> tag,
+              Args&&... args)
+      : envelope{source, destination, Message{tag, std::forward<Args>(args)...}} {}
   bool operator==(const SendMessage&) const = default;
 };
 struct ScheduleTimer {

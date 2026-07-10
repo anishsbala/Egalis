@@ -28,3 +28,26 @@ Pending local metadata must match the frozen self-request; inconsistent inputs
 are rejected without overwriting it. Higher ballots or noninitial phases are
 stale, with no second transition. C014 will refine identical retransmissions.
 PreAcceptOK collection remains unsupported: receiving five votes cannot commit.
+
+## C014 duplicate policy and response caching
+
+The paper's receive guard forbids running the transition twice, but does not
+spell out retransmission handling. Replaying the exact earlier response is a
+transport refinement equivalent to link duplication, not a new vote. It is allowed
+only at bal=0 and phase=preaccepted, with identical command and original D.
+The authoritative dep field is the frozen response cache in that phase; it must
+not be overwritten before phase/ballot advancement. No extra instance table or
+duplicate dependency set is stored. In particular, never recompute the reply
+after learning another conflicting command. Replays have a separate trace status.
+
+Changed payloads/proposals are rejected with no effects or state mutation.
+Advanced phases/ballots are stale and cannot replay old votes. Missing/inconsistent
+initial metadata cannot authorize replay. No new NACK or recovery rule is added.
+Original initCmd/initDep remain separate from expanded dep, including when an
+identical payload is submitted under a different ID. A future vote collector must
+count distinct replicas, not reply packets; that collector is milestone 10.
+
+Suspend/resume retains the same volatile record and cache. Queued pre-crash events
+are discarded by network generation; a newly transmitted retry may replay the
+retained response. This does not model loss of memory or establish durable restart
+safety. Durable supporting records and ID reservations remain separate milestones.

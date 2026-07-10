@@ -29,8 +29,8 @@ DispatchResult Replica::handle(const Submit& input) {
   DispatchResult result{DispatchStatus::processed, {SubmissionRegistered{input.instance}}};
   result.effects.reserve(1 + Configuration::replicas);
   const auto send = [&](ReplicaId destination) {
-    result.effects.emplace_back(std::in_place_type<SendMessage>,
-        SendMessage{{id_, destination, PreAccept{input.instance, input.command, proposed}}});
+    result.effects.emplace_back(std::in_place_type<SendMessage>, id_, destination,
+        std::in_place_type<PreAccept>, input.instance, input.command, proposed);
   };
   send(id_);
   for (const auto member : members()) if (member != id_) send(member);

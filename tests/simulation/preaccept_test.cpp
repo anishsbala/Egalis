@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 #include <array>
+#include <memory>
+#include <vector>
 
 namespace egalis::sim {
 namespace {
@@ -74,5 +76,82 @@ TEST(PreAcceptSimulation, SeededInitialVotesAndFaultsReplayExactly) {
     Network replay{parse_trace(serialize(original.trace())), faults}; seeded(replay);
     EXPECT_EQ(original.trace(), replay.trace());
   }
+}
+namespace {
+class Replies final : public transport::Endpoint {
+ public:
+  void receive(const protocol::Envelope& envelope) override { messages.push_back(envelope); }
+  std::vector<protocol::Envelope> messages;
+};
+Replies& inbox(Network& network, ReplicaId id) {
+  auto endpoint = std::make_unique<Replies>();
+  auto& reference = *endpoint;
+  network.attach(id, std::move(endpoint));
+  return reference;
+}
+protocol::Envelope packet(InstanceId id, ReplicaId target, std::string value = "v") {
+  return {id.coordinator(), target, protocol::PreAccept{id, kv::Put{"k", std::move(value)}, {}}};
+}
+void cached_scenario(Network& network) {
+  const ReplicaId a{0}, target{1}, b{2};
+  auto& source = inbox(network, a);
+  inbox(network, b);
+  auto& replica = ReplicaEndpoint::attach(network, target);
+  const InstanceId first{1, a}, other{1, b};
+  network.send(packet(first, target), DeliveryPlan{false, {1}, true, {5}});
+  network.send(packet(other, target), DeliveryPlan{false, {2}, false, {2}});
+  EXPECT_EQ(network.scheduler().run(), 6U);  // Three requests, three responses.
+  ASSERT_EQ(source.messages.size(), 2U);
+  EXPECT_EQ(source.messages[0], source.messages[1]);
+  EXPECT_TRUE(std::get<protocol::PreAcceptOk>(source.messages[0].message).dependencies.empty());
+  EXPECT_TRUE(replica.core().instances().at(first).state.dependencies.empty());
+  EXPECT_EQ(replica.core().instances().at(other).state.dependencies, (protocol::Dependencies{first}));
+  EXPECT_EQ(replica.last_status(), protocol::DispatchStatus::replayed);
+  EXPECT_EQ(replica.dispatch_count(), 3U);
+  network.verify_replay_complete();
+}
+}
+TEST(PreAcceptSimulation, DuplicateAfterInterveningConflictReplaysExactFrozenResponse) {
+  Network original; cached_scenario(original);
+  Network repeated; cached_scenario(repeated);
+  EXPECT_EQ(original.trace(), repeated.trace());
+  Network replay{parse_trace(serialize(original.trace())), FaultPolicy{}}; cached_scenario(replay);
+  EXPECT_EQ(original.trace(), replay.trace());
+}
+TEST(PreAcceptSimulation, OldGenerationIsDiscardedButFreshRetryAfterResumeReplaysResponse) {
+  Network network;
+  const ReplicaId owner{0}, target{1};
+  auto& source = inbox(network, owner);
+  auto& replica = ReplicaEndpoint::attach(network, target);
+  const InstanceId id{1, owner};
+  network.send(packet(id, target), DeliveryPlan{false, {1}, true, {5}});
+  EXPECT_TRUE(network.scheduler().step());
+  network.crash(target);
+  network.restart(target);
+  network.scheduler().run();
+  EXPECT_EQ(replica.dispatch_count(), 1U);
+  ASSERT_EQ(source.messages.size(), 1U);
+  network.send(packet(id, target), DeliveryPlan{false, {0}, false, {0}});
+  network.scheduler().run();
+  ASSERT_EQ(source.messages.size(), 2U);
+  EXPECT_EQ(source.messages[0], source.messages[1]);
+  EXPECT_EQ(replica.last_status(), protocol::DispatchStatus::replayed);
+  EXPECT_EQ(replica.dispatch_count(), 2U);
+}
+TEST(PreAcceptSimulation, ConflictingDuplicateIsRejectedWithoutReplyOrNetworkFailure) {
+  Network network;
+  const ReplicaId owner{0}, target{1};
+  auto& source = inbox(network, owner);
+  auto& replica = ReplicaEndpoint::attach(network, target);
+  const InstanceId id{1, owner};
+  network.send(packet(id, target));
+  network.scheduler().run();
+  network.send(packet(id, target, "different"));
+  network.scheduler().run();
+  EXPECT_EQ(source.messages.size(), 1U);
+  EXPECT_EQ(replica.last_status(), protocol::DispatchStatus::rejected);
+  EXPECT_FALSE(network.scheduler().failed());
+  EXPECT_EQ(replica.core().instances().at(id).state.command,
+            (kv::Payload{kv::Command{kv::Put{"k", "v"}}}));
 }
 }  // namespace egalis::sim

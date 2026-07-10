@@ -103,3 +103,11 @@ repeated/replayed with faults. Existing tests now assert real peer preaccept
 knowledge and preaccepted (not committed) phases; no case is removed.
 The exact staged export must pass both configurations before committing.
 PreAcceptOK collection, commit, slow agreement and recovery remain unsupported.
+
+## C014: duplicate PreAccept response replay
+
+Exact duplicates at ballot zero in PreAccepted replay the recorded dependency response without another transition or dependency rescan. Changed commands or original dependency proposals are rejected; advanced phases and ballots do not replay. No quorum collection or commit path is implemented.
+
+Added eight focused cases covering cached replies after intervening conflicts, conflicting duplicates, phase guards, suspension and resume, reordered and duplicated simulated deliveries, crash generations, and owned in-place message effects. The suite passes 122/122 in Debug and Release with warnings treated as errors. A Release compiler diagnostic on intermediate nested variant moves was resolved by constructing concrete message effects in place, without suppressing warnings or reducing optimization.
+
+The exact staged tree is separately exported, built, and tested in both configurations before commit. Actual execution logs and reconstructed-timeline planning records are retained locally outside this historical engineering record.
