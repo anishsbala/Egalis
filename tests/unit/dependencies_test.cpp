@@ -205,11 +205,13 @@ TEST(Dependencies, UnsupportedCandidateChangesCannotAlterTheLiveOracle) {
   const auto ballot = Ballot::recovery(1, local);
   const Dependencies proposed{id(7, 4)};
   const auto before = replica.expand_dependencies(target, get(), proposed);
-  for (const Message& message : std::vector<Message>{
-      Accept{ballot, id(1), kv::Nop{}, {}}, Commit{ballot, id(1), kv::Nop{}, {}},
-      Validate{ballot, id(1), put("other"), {}}}) {
+  const std::pair<Message, DispatchStatus> candidates[]{
+      {Accept{ballot, id(1), kv::Nop{}, {}}, DispatchStatus::unsupported},
+      {Commit{ballot, id(1), kv::Nop{}, {}}, DispatchStatus::stale},
+      {Validate{ballot, id(1), put("other"), {}}, DispatchStatus::unsupported}};
+  for (const auto& [message, expected] : candidates) {
     const auto result = replica.dispatch(PeerMessage{{local, local, message}});
-    EXPECT_EQ(result.status, DispatchStatus::unsupported);
+    EXPECT_EQ(result.status, expected);
     EXPECT_TRUE(result.effects.empty());
     EXPECT_EQ(replica.expand_dependencies(target, get(), proposed), before);
     EXPECT_EQ(replica.instances().at(id(1)).state.command, (kv::Payload{put()}));

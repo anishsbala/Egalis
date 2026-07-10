@@ -1,4 +1,4 @@
-# Initial agreement observations
+# Initial agreement
 
 C015 collects ballot-zero replies for local submissions under Figure 3 of the
 baseline EPaxos* protocol. [Section 3.2, Figure 3](https://arxiv.org/html/2511.02743v1#S3.F3)
@@ -21,5 +21,23 @@ dependency field used to replay the replica's own PreAcceptOK. Matching compares
 each observed dependency set with the frozen initial proposal, so even four
 identical expansions fail that comparison.
 
-Collection returns an empty effect list. C016 owns the fast Commit path and C017
-owns the grace timer and selection of the slow handoff.
+## Fast decision and Commit receipt
+
+The fourth distinct reply triggers a fast decision when all four replies match
+the initial proposal. The coordinator freezes the selected quorum before
+returning one ballot-zero Commit to each member, self first and the remaining
+members in canonical order. The Commit carries the current command and the
+initial dependencies. Later replies leave the selected quorum intact.
+
+Every recipient, including the coordinator, uses the same Commit handler.
+Figure 3 requires the current ballot to equal the message ballot. An unknown
+instance has ballot zero and can become committed before its PreAccept arrives.
+Receipt sets the accepted ballot, command, chosen dependencies and committed
+phase. The current ballot and initial metadata retain their prior values.
+Chosen dependencies can replace a larger local expansion. An equivalent
+duplicate is inert. A contradictory value is rejected and the decision remains
+intact. A locally owned instance learned through Commit advances the shared ID
+allocator.
+
+C017 adds the grace timer and selection of the slow handoff. Commit receipt has
+no client or execution effects at this stage.

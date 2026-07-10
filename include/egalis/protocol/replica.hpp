@@ -20,6 +20,8 @@ struct InstanceRecord {
   std::optional<TimerGuard> timer;
   // Transient coordinator state, engaged only by a local submission.
   std::optional<PreAcceptObservations> preaccept_observations;
+  // Once selected, the observations are the frozen quorum for this round.
+  bool initial_quorum_selected = false;
 };
 
 // Serialized, non-reentrant ownership boundary. No callbacks, threads, transport,
@@ -56,6 +58,7 @@ class Replica {
   DispatchResult handle(const PeerMessage& input);
   DispatchResult receive_preaccept(ReplicaId source, const PreAccept& message);
   DispatchResult receive_preaccept_ok(ReplicaId source, const PreAcceptOk& message);
+  DispatchResult receive_commit(const Commit& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);
   ReplicaId id_;

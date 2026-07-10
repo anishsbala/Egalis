@@ -1,3 +1,4 @@
+#include "egalis/protocol/commit.hpp"
 #include "egalis/protocol/replica.hpp"
 
 #include <gtest/gtest.h>
@@ -30,6 +31,11 @@ void expect_observation(Replica& replica, const PeerMessage& reply, DispatchStat
 void learn_conflict(Replica& replica, InstanceId conflict) {
   ASSERT_EQ(replica.dispatch(PeerMessage{{conflict.coordinator(), owner,
       PreAccept{conflict, command, {}}}}).status, DispatchStatus::processed);
+}
+PeerMessage commit(InstanceId instance, ReplicaId destination, Dependencies dependencies = {},
+                   Ballot ballot = {}, const kv::Payload& payload = command) {
+  return {{ballot.owner(instance), destination,
+           Commit{ballot, instance, payload, std::move(dependencies)}}};
 }
 }  // namespace
 
@@ -174,5 +180,177 @@ TEST(InitialAgreement, GuardNeedsPreacceptedPhaseAndCurrentBallotZero) {
     state.ballots.current = Ballot::recovery(1, owner);
     EXPECT_FALSE(initial_observation_allowed(state));
   }
+}
+
+TEST(InitialAgreement, FourthDistinctOriginalVoteSealsOneCommitBeforeSelfDelivery) {
+  Replica replica{owner};
+  learn_conflict(replica, dependency);
+  const auto preaccept = submit(replica);
+  const auto self_reply = preaccept_self(replica, preaccept);
+  const Dependencies proposed{dependency};
+  const auto first = observation(peer, id, proposed);
+  const auto fourth = observation(ReplicaId{3}, id, proposed);
+  expect_observation(replica, PeerMessage{self_reply}, DispatchStatus::processed);
+  expect_observation(replica, first, DispatchStatus::processed);
+  expect_observation(replica, observation(ReplicaId{2}, id, proposed), DispatchStatus::processed);
+  expect_observation(replica, first, DispatchStatus::replayed);
+  ASSERT_EQ(replica.instances().at(id).state.phase, Phase::preaccepted);
+  ASSERT_EQ(replica.instances().at(id).preaccept_observations->size(), 3U);
+
+  const auto decision = replica.dispatch(fourth);
+  EXPECT_EQ(decision.status, DispatchStatus::processed);
+  ASSERT_EQ(decision.effects.size(), 5U);
+  for (unsigned index = 0; index < 5; ++index) {
+    EXPECT_EQ(std::get<SendMessage>(decision.effects[index]).envelope,
+              commit(id, ReplicaId{index}, proposed).envelope);
+  }
+  const auto& record = replica.instances().at(id);
+  EXPECT_EQ(record.state.phase, Phase::preaccepted);
+  ASSERT_EQ(record.preaccept_observations->size(), 4U);
+  const auto selected = *record.preaccept_observations;
+  expect_observation(replica, fourth, DispatchStatus::stale);
+  expect_observation(replica, observation(ReplicaId{4}, id, {dependency, newer_conflict}),
+                     DispatchStatus::stale);
+  EXPECT_EQ(record.preaccept_observations, selected);
+
+  const auto self_commit = std::get<SendMessage>(decision.effects.front()).envelope;
+  EXPECT_EQ(replica.dispatch(PeerMessage{self_commit}), (DispatchResult{DispatchStatus::processed, {}}));
+  EXPECT_EQ(record.state.phase, Phase::committed);
+  EXPECT_EQ(record.state.dependencies, proposed);
+  EXPECT_EQ(record.preaccept_observations, selected);
+  expect_observation(replica, first, DispatchStatus::stale);
+}
+
+TEST(InitialAgreement, ASelectedQuorumCannotDiscardAnExpandedObservation) {
+  Replica replica{owner};
+  expect_observation(replica, PeerMessage{preaccept_self(replica, submit(replica))},
+                     DispatchStatus::processed);
+  expect_observation(replica, observation(peer, id, {dependency}), DispatchStatus::processed);
+  for (const auto sender : {ReplicaId{2}, ReplicaId{3}, ReplicaId{4}})
+    expect_observation(replica, observation(sender, id), DispatchStatus::processed);
+  const auto& record = replica.instances().at(id);
+  ASSERT_EQ(record.preaccept_observations->size(), 5U);
+  EXPECT_EQ(record.preaccept_observations->at(peer), (Dependencies{dependency}));
+  EXPECT_EQ(record.state.phase, Phase::preaccepted);
+}
+
+TEST(CommitAgreement, BallotZeroMaterializesWithoutPriorPreaccept) {
+  Replica replica{peer};
+  EXPECT_EQ(replica.dispatch(commit(id, peer, {dependency})),
+            (DispatchResult{DispatchStatus::processed, {}}));
+  ASSERT_TRUE(replica.instances().contains(id));
+  const auto& record = replica.instances().at(id);
+  EXPECT_EQ(record.state.ballots.current, Ballot{});
+  EXPECT_EQ(record.state.ballots.accepted, Ballot{});
+  EXPECT_EQ(record.state.phase, Phase::committed);
+  EXPECT_EQ(record.state.command, (kv::Payload{command}));
+  EXPECT_EQ(record.state.dependencies, (Dependencies{dependency}));
+  EXPECT_FALSE(record.state.initial_command);
+  EXPECT_TRUE(record.state.initial_dependencies.empty());
+  EXPECT_FALSE(record.preaccept_observations);
+  EXPECT_EQ(replica.dispatch(PeerMessage{{owner, peer, PreAccept{id, command, {dependency}}}}),
+            (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_FALSE(record.state.initial_command);
+  EXPECT_TRUE(record.state.initial_dependencies.empty());
+}
+
+TEST(CommitAgreement, HigherBallotCannotCreateAnInstanceOrJoinAnExistingOne) {
+  Replica replica{owner};
+  const InstanceId future{20, owner};
+  const Ballot recovery = Ballot::recovery(1, peer);
+  EXPECT_EQ(replica.dispatch(commit(future, owner, {}, recovery)),
+            (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_TRUE(replica.instances().empty());
+  const auto preaccept = submit(replica);
+  const auto reply = preaccept_self(replica, preaccept);
+  EXPECT_EQ(replica.dispatch(commit(id, owner, {dependency}, recovery)),
+            (DispatchResult{DispatchStatus::stale, {}}));
+  const auto& state = replica.instances().at(id).state;
+  EXPECT_EQ(state.ballots.current, Ballot{});
+  EXPECT_EQ(state.ballots.accepted, Ballot{});
+  EXPECT_EQ(state.phase, Phase::preaccepted);
+  EXPECT_EQ(replica.dispatch(PeerMessage{preaccept}).effects, (Effects{SendMessage{reply}}));
+  const auto result = replica.dispatch(SubmitCommand{kv::Get{"another"}});
+  EXPECT_EQ(std::get<SubmissionRegistered>(result.effects.front()).instance, (InstanceId{2, owner}));
+}
+
+TEST(CommitAgreement, ExactCurrentBallotGuardAppliesInEveryPhase) {
+  const auto earlier = Ballot::recovery(1, owner);
+  const auto current = Ballot::recovery(2, peer);
+  const auto different_owner = Ballot::recovery(2, owner);
+  const auto later = Ballot::recovery(3, owner);
+  for (const auto phase : {Phase::initial, Phase::preaccepted, Phase::accepted, Phase::committed}) {
+    InstanceState state;
+    state.phase = phase;
+    state.ballots = {current, {}};
+    EXPECT_TRUE(commit_allowed(state, current));
+    EXPECT_FALSE(commit_allowed(state, Ballot{}));
+    EXPECT_FALSE(commit_allowed(state, earlier));
+    EXPECT_FALSE(commit_allowed(state, different_owner));
+    EXPECT_FALSE(commit_allowed(state, later));
+  }
+}
+
+TEST(CommitAgreement, InstallChosenDependenciesOverExpandedLocalDependencies) {
+  Replica replica{ReplicaId{4}};
+  const auto recipient = replica.id();
+  const kv::Command original = kv::Put{"key", "local context"};
+  const InstanceId proposed_dependency{6, peer};
+  replica.dispatch(PeerMessage{{peer, recipient, PreAccept{dependency, original, {}}}});
+  const auto result = replica.dispatch(PeerMessage{{owner, recipient,
+      PreAccept{id, original, {proposed_dependency}}}});
+  ASSERT_EQ(result.status, DispatchStatus::processed);
+  const auto& state = replica.instances().at(id).state;
+  ASSERT_EQ(state.dependencies, (Dependencies{dependency, proposed_dependency}));
+
+  const auto decision = commit(id, recipient, {proposed_dependency});
+  EXPECT_EQ(replica.dispatch(decision), (DispatchResult{DispatchStatus::processed, {}}));
+  EXPECT_EQ(state.phase, Phase::committed);
+  EXPECT_EQ(state.dependencies, (Dependencies{proposed_dependency}));
+  EXPECT_EQ(state.command, (kv::Payload{command}));
+  EXPECT_EQ(state.initial_command, original);
+  EXPECT_EQ(state.initial_dependencies, (Dependencies{proposed_dependency}));
+}
+
+TEST(CommitAgreement, EquivalentDuplicatesReplayAndContradictionsPreserveTheDecision) {
+  Replica replica{peer};
+  const auto decision = commit(id, peer, {dependency});
+  ASSERT_EQ(replica.dispatch(decision).status, DispatchStatus::processed);
+  EXPECT_EQ(replica.dispatch(decision), (DispatchResult{DispatchStatus::replayed, {}}));
+  EXPECT_EQ(replica.dispatch(commit(id, peer)), (DispatchResult{DispatchStatus::rejected, {}}));
+  EXPECT_EQ(replica.dispatch(commit(id, peer, {dependency}, {}, kv::Command{kv::Get{"key"}})),
+            (DispatchResult{DispatchStatus::rejected, {}}));
+  const auto& state = replica.instances().at(id).state;
+  EXPECT_EQ(state.phase, Phase::committed);
+  EXPECT_EQ(state.command, (kv::Payload{command}));
+  EXPECT_EQ(state.dependencies, (Dependencies{dependency}));
+}
+
+TEST(CommitAgreement, LocalCommitAdvancesTheSharedInstanceAllocator) {
+  Replica replica{owner};
+  const InstanceId learned{7, owner};
+  ASSERT_EQ(replica.dispatch(commit(learned, owner)).status, DispatchStatus::processed);
+  const auto submitted = replica.dispatch(SubmitCommand{kv::Get{"another"}});
+  EXPECT_EQ(std::get<SubmissionRegistered>(submitted.effects.front()).instance,
+            (InstanceId{8, owner}));
+  EXPECT_EQ(replica.instances().at(learned).state.phase, Phase::committed);
+}
+
+TEST(CommitAgreement, MalformedMessagesCannotAllocateOrChangeProtocolState) {
+  Replica replica{peer};
+  ASSERT_EQ(replica.dispatch(commit(id, peer)).status, DispatchStatus::processed);
+  const InstanceId unknown{2, owner};
+  auto wrong_sender = commit(unknown, peer);
+  wrong_sender.envelope.source = peer;
+  EXPECT_THROW(replica.dispatch(wrong_sender), std::invalid_argument);
+  EXPECT_THROW(replica.dispatch(commit(unknown, owner)), std::invalid_argument);
+  EXPECT_THROW(replica.dispatch(commit(id, peer, {id})), std::invalid_argument);
+  EXPECT_THROW(replica.dispatch(commit(id, peer, {}, {}, kv::Payload{})), std::invalid_argument);
+  EXPECT_THROW(replica.dispatch(commit(id, peer, {}, {}, kv::Nop{})), std::invalid_argument);
+  ASSERT_EQ(replica.instances().size(), 1U);
+  const auto& state = replica.instances().at(id).state;
+  EXPECT_EQ(state.phase, Phase::committed);
+  EXPECT_EQ(state.command, (kv::Payload{command}));
+  EXPECT_TRUE(state.dependencies.empty());
 }
 }  // namespace egalis::protocol
