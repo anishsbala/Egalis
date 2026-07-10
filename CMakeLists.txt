@@ -22,7 +22,7 @@ endif()
 add_library(egalis_foundation
   src/protocol/types.cpp src/kv/command.cpp src/protocol/messages.cpp src/protocol/events.cpp
   src/protocol/replica.cpp src/protocol/dependencies.cpp src/protocol/instance_allocator.cpp
-  src/protocol/preaccept.cpp)
+  src/protocol/preaccept.cpp src/protocol/initial_agreement.cpp)
 target_include_directories(egalis_foundation PUBLIC include)
 target_link_libraries(egalis_foundation PUBLIC egalis_build_options)
 add_library(egalis_sim
@@ -51,7 +51,7 @@ if(BUILD_TESTING)
   add_executable(egalis_unit_tests
     tests/unit/types_test.cpp tests/unit/command_test.cpp tests/unit/messages_test.cpp
     tests/unit/events_test.cpp tests/unit/replica_test.cpp tests/unit/dependencies_test.cpp
-    tests/unit/submission_test.cpp tests/unit/preaccept_test.cpp)
+    tests/unit/submission_test.cpp tests/unit/preaccept_test.cpp tests/unit/agreement_test.cpp)
   target_link_libraries(egalis_unit_tests PRIVATE egalis_foundation GTest::gtest_main)
   gtest_discover_tests(egalis_unit_tests)
   add_executable(egalis_sim_tests tests/simulation/scheduler_test.cpp tests/simulation/network_test.cpp

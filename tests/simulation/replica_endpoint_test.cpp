@@ -62,7 +62,9 @@ TEST(ReplicaEndpoint, EndpointDispatchUsesTheSameCoreAndPreacceptsWithoutCommitt
   auto& source = ReplicaEndpoint::attach(network, local);
   auto& target = ReplicaEndpoint::attach(network, ReplicaId{1});
   source.dispatch(submission());
-  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::unsupported);  // PreAcceptOK collection is deferred.
+  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::processed);
+  EXPECT_EQ(source.core().instances().at(id).preaccept_observations,
+            (protocol::PreAcceptObservations{{local, {}}}));
   source.execute(sends({message(0, 1)}));
   EXPECT_EQ(target.dispatch_count(), 0U);
   EXPECT_EQ(network.scheduler().run(), 6U);  // Four PreAccepts, Waiting and a remote PreAcceptOK.

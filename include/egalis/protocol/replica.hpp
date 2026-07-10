@@ -1,6 +1,7 @@
 #pragma once
 
 #include "egalis/protocol/events.hpp"
+#include "egalis/protocol/initial_agreement.hpp"
 #include "egalis/protocol/instance_allocator.hpp"
 
 #include <map>
@@ -17,6 +18,8 @@ struct DispatchResult {
 struct InstanceRecord {
   InstanceState state;
   std::optional<TimerGuard> timer;
+  // Transient coordinator state, engaged only by a local submission.
+  std::optional<PreAcceptObservations> preaccept_observations;
 };
 
 // Serialized, non-reentrant ownership boundary. No callbacks, threads, transport,
@@ -52,6 +55,7 @@ class Replica {
   DispatchResult handle(const SubmitCommand& input);
   DispatchResult handle(const PeerMessage& input);
   DispatchResult receive_preaccept(ReplicaId source, const PreAccept& message);
+  DispatchResult receive_preaccept_ok(ReplicaId source, const PreAcceptOk& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);
   ReplicaId id_;

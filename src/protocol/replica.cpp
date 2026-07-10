@@ -20,12 +20,13 @@ DispatchResult Replica::handle(const Submit& input) {
   if (instances_.contains(input.instance))
     throw std::invalid_argument("submission reuses an instance ID");
   const auto proposed = known_dependencies(input.instance, input.command);
-  // Frozen pending self-PreAccept metadata, not a vote. The runner must finish
-  // the local effect before remote effects; C013 supplies the receive handler.
+  // Freeze the proposal and open an empty collector. The runner delivers the
+  // self-PreAccept and its real reply before sending the remote effects.
   InstanceRecord record;
   record.state.command = input.command;
   record.state.initial_command = input.command;
   record.state.initial_dependencies = proposed;
+  record.preaccept_observations.emplace();
   DispatchResult result{DispatchStatus::processed, {SubmissionRegistered{input.instance}}};
   result.effects.reserve(1 + Configuration::replicas);
   const auto send = [&](ReplicaId destination) {
@@ -46,7 +47,8 @@ DispatchResult Replica::handle(const PeerMessage& input) {
     throw std::invalid_argument("message delivered to wrong replica");
   if (const auto* message = std::get_if<PreAccept>(&input.envelope.message))
     return receive_preaccept(input.envelope.source, *message);
-  // PreAcceptOK collection, agreement and recovery remain later milestones.
+  if (const auto* message = std::get_if<PreAcceptOk>(&input.envelope.message))
+    return receive_preaccept_ok(input.envelope.source, *message);
   return {DispatchStatus::unsupported, {}};
 }
 DispatchResult Replica::handle(const TimerFired& input) {
