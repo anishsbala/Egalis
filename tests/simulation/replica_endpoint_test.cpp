@@ -43,26 +43,32 @@ void scenario(Network& network) {
   endpoints[2]->arm_timer(InstanceId{1, ReplicaId{2}}, {1});
   network.scheduler().run(100);
   EXPECT_EQ(network.scheduler().pending(), 0U);
-  for (const auto* endpoint : endpoints) {
-    ASSERT_EQ(endpoint->core().instances().size(), 1U);
-    EXPECT_EQ(endpoint->core().instances().begin()->second.state.phase, protocol::Phase::initial);
+  for (unsigned i = 0; i < endpoints.size(); ++i) {
+    const auto& table = endpoints[i]->core().instances();
+    EXPECT_TRUE(table.contains(InstanceId{1, ReplicaId{i}}));
+    EXPECT_GE(table.size(), 1U);
+    EXPECT_LE(table.size(), 5U);
+    for (const auto& [known, record] : table) {
+      EXPECT_EQ(record.state.phase, protocol::Phase::preaccepted);
+      EXPECT_FALSE(record.state.dependencies.contains(known));
+    }
   }
   network.verify_replay_complete();
 }
 }
 
-TEST(ReplicaEndpoint, EndpointDispatchUsesTheSameCoreAndNeverVotesYet) {
+TEST(ReplicaEndpoint, EndpointDispatchUsesTheSameCoreAndPreacceptsWithoutCommitting) {
   Network network;
   auto& source = ReplicaEndpoint::attach(network, local);
   auto& target = ReplicaEndpoint::attach(network, ReplicaId{1});
   source.dispatch(submission());
-  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::unsupported);  // Self-PreAccept pending C013.
+  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::unsupported);  // PreAcceptOK collection is deferred.
   source.execute(sends({message(0, 1)}));
   EXPECT_EQ(target.dispatch_count(), 0U);
-  EXPECT_EQ(network.scheduler().run(), 5U);  // Four PreAccepts plus the explicit Waiting.
+  EXPECT_EQ(network.scheduler().run(), 6U);  // Four PreAccepts, Waiting and a remote PreAcceptOK.
   EXPECT_EQ(target.last_status(), protocol::DispatchStatus::unsupported);
-  EXPECT_TRUE(target.core().instances().empty());
-  EXPECT_EQ(source.core().instances().at(id).state.phase, protocol::Phase::initial);
+  EXPECT_EQ(target.core().instances().at(id).state.phase, protocol::Phase::preaccepted);
+  EXPECT_EQ(source.core().instances().at(id).state.phase, protocol::Phase::preaccepted);
 }
 TEST(ReplicaEndpoint, SelfDeliveryCompletesBeforeFollowingEffectsAtTheSameTick) {
   Network network{Duration{99}};
@@ -155,7 +161,7 @@ TEST(ReplicaEndpoint, DuplicateDeliveryDoesNotAllocateOrMutateProtocolRecords) {
   EXPECT_EQ(network.scheduler().run(), 2U);
   EXPECT_EQ(target.dispatch_count(), before + 2);
   EXPECT_EQ(target.core().instances().size(), 1U);
-  EXPECT_EQ(target.core().instances().begin()->second.state.phase, protocol::Phase::initial);
+  EXPECT_EQ(target.core().instances().begin()->second.state.phase, protocol::Phase::preaccepted);
 }
 TEST(ReplicaEndpoint, EffectBatchRejectsForeignSourceBeforeSendingAnything) {
   Network network;

@@ -16,3 +16,15 @@ external event may intervene before local consequences complete. Current dep is
 not confused with the initial proposal. Registration is not a KV success reply.
 C012 provides submission only; PreAccept receipt and duplicate replay are separate
 subsequent slices. There is no PreAcceptOK collection or commit decision yet.
+
+## C013 receive transition
+
+The exact Figure 3 guard is bal=0 and phase=initial, never a phase ordinal test.
+Structural sender/destination and self-dependency checks precede dispatch. A new
+record or pending self-request gets cmd/initCmd=c, initDep=D, dep=D union current
+known conflicts, and phase=preaccepted; abal stays zero. The response is one
+PreAcceptOK to the initial coordinator. All allocations precede state replacement.
+Pending local metadata must match the frozen self-request; inconsistent inputs
+are rejected without overwriting it. Higher ballots or noninitial phases are
+stale, with no second transition. C014 will refine identical retransmissions.
+PreAcceptOK collection remains unsupported: receiving five votes cannot commit.

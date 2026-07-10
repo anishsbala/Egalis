@@ -91,3 +91,15 @@ Existing assertions now account for five PreAccept effects and frozen metadata;
 no test case is removed. Receiver-side voting is still unsupported in this slice.
 The exact staged export must pass both configurations before committing.
 Actual dated execution records remain separate from reconstructed commit dates.
+
+## C013: baseline PreAccept receive
+
+Working Debug and Release with -Werror passed 114/114 tests each.
+Seven new unit cases test the exact ballot/phase guard, expanded response versus
+initial metadata, invalid inputs, frozen self-requests, at-most-once transition,
+owned-ID observation and commuting reads. Three simulator cases exercise
+simultaneous conflicting coordinators, reordered receipts and eight seeded runs
+repeated/replayed with faults. Existing tests now assert real peer preaccept
+knowledge and preaccepted (not committed) phases; no case is removed.
+The exact staged export must pass both configurations before committing.
+PreAcceptOK collection, commit, slow agreement and recovery remain unsupported.

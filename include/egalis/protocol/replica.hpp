@@ -8,7 +8,7 @@
 
 namespace egalis::protocol {
 
-enum class DispatchStatus { processed, unsupported, stale };
+enum class DispatchStatus { processed, unsupported, stale, rejected };
 struct DispatchResult {
   DispatchStatus status;
   Effects effects;
@@ -51,6 +51,7 @@ class Replica {
   DispatchResult handle(const Submit& input);
   DispatchResult handle(const SubmitCommand& input);
   DispatchResult handle(const PeerMessage& input);
+  DispatchResult receive_preaccept(ReplicaId source, const PreAccept& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);
   ReplicaId id_;

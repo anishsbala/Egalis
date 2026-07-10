@@ -44,8 +44,9 @@ DispatchResult Replica::handle(const SubmitCommand& input) {
 DispatchResult Replica::handle(const PeerMessage& input) {
   if (input.envelope.destination != id_)
     throw std::invalid_argument("message delivered to wrong replica");
-  // No missing record is materialized by an unsupported message, and no
-  // reply implies that a vote was taken. Agreement starts at milestone 9.
+  if (const auto* message = std::get_if<PreAccept>(&input.envelope.message))
+    return receive_preaccept(input.envelope.source, *message);
+  // PreAcceptOK collection, agreement and recovery remain later milestones.
   return {DispatchStatus::unsupported, {}};
 }
 DispatchResult Replica::handle(const TimerFired& input) {

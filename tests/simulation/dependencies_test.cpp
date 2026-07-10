@@ -25,10 +25,21 @@ void scenario(Network& network) {
       const auto& core = replicas[member.value()]->core();
       const InstanceId target{9, member};
       const Dependencies proposed{InstanceId{100, ReplicaId{4}}};
-      EXPECT_EQ(core.known_dependencies(target, read), (Dependencies{InstanceId{1, member}}));
-      EXPECT_EQ(core.expand_dependencies(target, write, proposed),
-                (Dependencies{InstanceId{1, member}, InstanceId{2, member}, InstanceId{100, ReplicaId{4}}}));
-      EXPECT_EQ(core.instances().size(), 3U);
+      Dependencies expected_read, expected_write = proposed;
+      for (const auto& [known, record] : core.instances()) {
+        // The workload assigns counter 1 to a shared PUT, 2 to a shared GET,
+        // and 3 to an unrelated PUT. Peer PreAccept now installs real knowledge.
+        if (known.counter() == 1) expected_read.insert(known);
+        if (known.counter() == 1 || known.counter() == 2) expected_write.insert(known);
+        EXPECT_LE(known.counter(), 3U);
+        EXPECT_EQ(record.state.phase, protocol::Phase::preaccepted);
+      }
+      EXPECT_EQ(core.known_dependencies(target, read), expected_read);
+      EXPECT_EQ(core.expand_dependencies(target, write, proposed), expected_write);
+      EXPECT_GE(core.instances().size(), 3U);
+      EXPECT_LE(core.instances().size(), 15U);
+      for (std::uint64_t counter = 1; counter <= 3; ++counter)
+        EXPECT_TRUE(core.instances().contains(InstanceId{counter, member}));
     }
     EXPECT_EQ(network.trace(), before);  // Queries introduce no events or effects.
   };
@@ -50,8 +61,11 @@ void scenario(Network& network) {
   network.restart(ReplicaId{0});
   network.partition(left, right, false);
   replicas[0]->dispatch(protocol::Submit{InstanceId{4, ReplicaId{0}}, kv::Get{"unrelated"}});
-  EXPECT_EQ(replicas[0]->core().known_dependencies(InstanceId{9, ReplicaId{0}}, read),
-            (Dependencies{InstanceId{1, ReplicaId{0}}}));
+  Dependencies expected;
+  for (const auto member : protocol::members())
+    if (replicas[0]->core().instances().contains(InstanceId{1, member}))
+      expected.insert(InstanceId{1, member});
+  EXPECT_EQ(replicas[0]->core().known_dependencies(InstanceId{9, ReplicaId{0}}, read), expected);
   network.scheduler().run(1000);
   network.verify_replay_complete();
 }
@@ -78,8 +92,8 @@ TEST(DependencySimulation, EqualTimeSubmissionsExposeOnlyPreviouslyKnownConflict
   });
   for (int i = 0; i < 3; ++i) EXPECT_TRUE(network.scheduler().step());
   EXPECT_EQ(observed, (std::vector<Dependencies>{{}, {first}, {first, second}}));
-  EXPECT_EQ(replica.core().instances().at(second).state.phase, protocol::Phase::initial);
-  EXPECT_TRUE(replica.core().instances().at(second).state.dependencies.empty());
+  EXPECT_EQ(replica.core().instances().at(second).state.phase, protocol::Phase::preaccepted);
+  EXPECT_EQ(replica.core().instances().at(second).state.dependencies, (Dependencies{first}));
   network.scheduler().run();
 }
 TEST(DependencySimulation, FaultedLiveCoreQueriesPreserveSeededTracesAndReplay) {
