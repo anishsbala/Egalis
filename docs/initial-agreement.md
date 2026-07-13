@@ -43,3 +43,14 @@ C017 implements the grace timer and frozen local slow handoff; see
 adr/0002-initial-agreement-grace.md for token ownership, lifecycle and timing
 limits. C019 will implement Accept from that handoff. Commit receipt has
 no client or execution effects at this stage.
+
+## Deterministic failure coverage
+
+Simulation scenarios exercise nonempty initial proposals, duplicate requests,
+three-survivor bounded slow handoff, two-survivor nondecision, disagreement before
+quorum and on the fourth reply, and both insertion orders when a fourth reply
+shares the grace deadline. Coordinator crash scenarios distinguish loss before
+decision from loss after immediate self-commit with remote Commit traffic queued.
+Each new scenario checks observed committed payload/dependencies after scheduler
+events and reconstructs a serialized trace for replay. These are bounded safety
+regressions, not recovery liveness, durable restart, execution or a safety proof.
