@@ -3,6 +3,7 @@
 #include "egalis/protocol/messages.hpp"
 
 #include <cstdint>
+#include <map>
 #include <variant>
 #include <vector>
 #include <utility>
@@ -86,7 +87,16 @@ struct SubmissionRegistered {
   InstanceId instance;
   bool operator==(const SubmissionRegistered&) const = default;
 };
-using Effect = std::variant<SendMessage, ScheduleTimer, CancelTimer, SubmissionRegistered>;
+// Owned local handoff, never a peer vote or an agreement decision. C019 consumes
+// this frozen snapshot to construct Accept without requiring another input.
+struct SlowPathReady {
+  InstanceId instance;
+  Ballot ballot;
+  std::map<ReplicaId, Dependencies> observations;
+  bool operator==(const SlowPathReady&) const = default;
+};
+using Effect = std::variant<SendMessage, ScheduleTimer, CancelTimer, SubmissionRegistered,
+                            SlowPathReady>;
 using Effects = std::vector<Effect>;
 
 // Structural checks are usable by both real and simulated runners. Validation

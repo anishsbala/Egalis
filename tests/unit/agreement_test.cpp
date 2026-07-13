@@ -157,12 +157,15 @@ TEST(InitialAgreement, FourEqualExpandedObservationsPreserveTheOriginalProposal)
   learn_conflict(replica, newer_conflict);
   const Dependencies expanded{dependency, newer_conflict};
   expect_observation(replica, PeerMessage{preaccept_self(replica, preaccept)}, DispatchStatus::processed);
-  for (const auto sender : {peer, ReplicaId{2}, ReplicaId{3}})
-    expect_observation(replica, observation(sender, id, expanded), DispatchStatus::processed);
+  expect_observation(replica, observation(peer, id, expanded), DispatchStatus::processed);
+  const auto slow = replica.dispatch(observation(ReplicaId{2}, id, expanded));
+  ASSERT_EQ(slow.effects.size(), 1U);
+  EXPECT_TRUE(std::holds_alternative<SlowPathReady>(slow.effects.front()));
+  expect_observation(replica, observation(ReplicaId{3}, id, expanded), DispatchStatus::stale);
   const auto& record = replica.instances().at(id);
   ASSERT_TRUE(record.preaccept_observations);
   EXPECT_EQ(*record.preaccept_observations, (PreAcceptObservations{{owner, expanded},
-      {peer, expanded}, {ReplicaId{2}, expanded}, {ReplicaId{3}, expanded}}));
+      {peer, expanded}, {ReplicaId{2}, expanded}}));
   const auto& state = record.state;
   EXPECT_FALSE(observations_match_initial_dependencies(*record.preaccept_observations, state));
   EXPECT_EQ(state.phase, Phase::preaccepted);
@@ -192,16 +195,20 @@ TEST(InitialAgreement, FourthDistinctOriginalVoteSealsOneCommitBeforeSelfDeliver
   const auto fourth = observation(ReplicaId{3}, id, proposed);
   expect_observation(replica, PeerMessage{self_reply}, DispatchStatus::processed);
   expect_observation(replica, first, DispatchStatus::processed);
-  expect_observation(replica, observation(ReplicaId{2}, id, proposed), DispatchStatus::processed);
+  const auto grace = replica.dispatch(observation(ReplicaId{2}, id, proposed));
+  ASSERT_EQ(grace.effects.size(), 1U);
+  EXPECT_TRUE(std::holds_alternative<ScheduleTimer>(grace.effects.front()));
   expect_observation(replica, first, DispatchStatus::replayed);
   ASSERT_EQ(replica.instances().at(id).state.phase, Phase::preaccepted);
   ASSERT_EQ(replica.instances().at(id).preaccept_observations->size(), 3U);
 
   const auto decision = replica.dispatch(fourth);
   EXPECT_EQ(decision.status, DispatchStatus::processed);
-  ASSERT_EQ(decision.effects.size(), 5U);
+  ASSERT_EQ(decision.effects.size(), 6U);
+  EXPECT_EQ(std::get<CancelTimer>(decision.effects.front()).token,
+            std::get<ScheduleTimer>(grace.effects.front()).guard.token);
   for (unsigned index = 0; index < 5; ++index) {
-    EXPECT_EQ(std::get<SendMessage>(decision.effects[index]).envelope,
+    EXPECT_EQ(std::get<SendMessage>(decision.effects[index + 1]).envelope,
               commit(id, ReplicaId{index}, proposed).envelope);
   }
   const auto& record = replica.instances().at(id);
@@ -213,7 +220,7 @@ TEST(InitialAgreement, FourthDistinctOriginalVoteSealsOneCommitBeforeSelfDeliver
                      DispatchStatus::stale);
   EXPECT_EQ(record.preaccept_observations, selected);
 
-  const auto self_commit = std::get<SendMessage>(decision.effects.front()).envelope;
+  const auto self_commit = std::get<SendMessage>(decision.effects[1]).envelope;
   EXPECT_EQ(replica.dispatch(PeerMessage{self_commit}), (DispatchResult{DispatchStatus::processed, {}}));
   EXPECT_EQ(record.state.phase, Phase::committed);
   EXPECT_EQ(record.state.dependencies, proposed);
@@ -226,10 +233,13 @@ TEST(InitialAgreement, ASelectedQuorumCannotDiscardAnExpandedObservation) {
   expect_observation(replica, PeerMessage{preaccept_self(replica, submit(replica))},
                      DispatchStatus::processed);
   expect_observation(replica, observation(peer, id, {dependency}), DispatchStatus::processed);
-  for (const auto sender : {ReplicaId{2}, ReplicaId{3}, ReplicaId{4}})
-    expect_observation(replica, observation(sender, id), DispatchStatus::processed);
+  const auto slow = replica.dispatch(observation(ReplicaId{2}, id));
+  ASSERT_EQ(slow.effects.size(), 1U);
+  EXPECT_TRUE(std::holds_alternative<SlowPathReady>(slow.effects.front()));
+  for (const auto sender : {ReplicaId{3}, ReplicaId{4}})
+    expect_observation(replica, observation(sender, id), DispatchStatus::stale);
   const auto& record = replica.instances().at(id);
-  ASSERT_EQ(record.preaccept_observations->size(), 5U);
+  ASSERT_EQ(record.preaccept_observations->size(), 3U);
   EXPECT_EQ(record.preaccept_observations->at(peer), (Dependencies{dependency}));
   EXPECT_EQ(record.state.phase, Phase::preaccepted);
 }
@@ -352,5 +362,137 @@ TEST(CommitAgreement, MalformedMessagesCannotAllocateOrChangeProtocolState) {
   EXPECT_EQ(state.phase, Phase::committed);
   EXPECT_EQ(state.command, (kv::Payload{command}));
   EXPECT_TRUE(state.dependencies.empty());
+}
+
+TEST(InitialGrace, ThirdOriginalReplyArmsOnePositiveTickWithoutDuplicateExtension) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  replica.dispatch(observation(peer, id));
+  const auto third = replica.dispatch(observation(ReplicaId{2}, id));
+  ASSERT_EQ(third.effects.size(), 1U);
+  const auto* timer = std::get_if<ScheduleTimer>(&third.effects.front());
+  ASSERT_NE(timer, nullptr);
+  EXPECT_EQ(timer->delay.ticks, 1U);
+  EXPECT_EQ(timer->guard.instance, id);
+  EXPECT_EQ(timer->guard.ballot, Ballot{});
+  EXPECT_TRUE(replica.dispatch(observation(peer, id)).effects.empty());
+  EXPECT_TRUE(replica.dispatch(observation(peer, id, {dependency})).effects.empty());
+  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+}
+
+TEST(InitialGrace, MismatchSelectsOnceAtThreeAndFreezesAllObservedValues) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  EXPECT_TRUE(replica.dispatch(observation(peer, id, {dependency})).effects.empty());
+  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  const auto selection = replica.dispatch(observation(ReplicaId{2}, id));
+  ASSERT_EQ(selection.effects.size(), 1U);
+  const auto& handoff = std::get<SlowPathReady>(selection.effects.front());
+  EXPECT_EQ(handoff.instance, id);
+  EXPECT_EQ(handoff.ballot, Ballot{});
+  EXPECT_EQ(handoff.observations, (PreAcceptObservations{{owner, {}},
+      {peer, {dependency}}, {ReplicaId{2}, {}}}));
+  EXPECT_TRUE(replica.instances().at(id).initial_quorum_selected);
+  const auto frozen = replica.instances().at(id).preaccept_observations;
+  EXPECT_EQ(replica.dispatch(observation(ReplicaId{3}, id)).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.instances().at(id).preaccept_observations, frozen);
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::preaccepted);
+  EXPECT_TRUE(replica.instances().at(id).state.dependencies.empty());
+  replica.suspend();
+  EXPECT_TRUE(replica.resume().empty());
+  EXPECT_EQ(handoff.observations, *frozen);
+}
+
+TEST(InitialGrace, ExpirySelectsSlowOnceAndLaterFourthCannotCommit) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  replica.dispatch(observation(peer, id));
+  const auto third = replica.dispatch(observation(ReplicaId{2}, id));
+  ASSERT_EQ(third.effects.size(), 1U);
+  const auto guard = std::get<ScheduleTimer>(third.effects.front()).guard;
+  const auto expired = replica.dispatch(TimerFired{guard});
+  EXPECT_EQ(expired.status, DispatchStatus::processed);
+  ASSERT_EQ(expired.effects.size(), 1U);
+  EXPECT_TRUE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_EQ(replica.instances().at(id).preaccept_observations->size(), 3U);
+  EXPECT_EQ(replica.dispatch(TimerFired{guard}).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.dispatch(observation(ReplicaId{3}, id)).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::preaccepted);
+}
+
+TEST(InitialGrace, SuspendInvalidatesGraceAndResumeRearmsEligibleRetainedCollection) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  replica.dispatch(observation(peer, id));
+  const auto third = replica.dispatch(observation(ReplicaId{2}, id));
+  const auto old = std::get<ScheduleTimer>(third.effects.front()).guard;
+  const auto cancelled = replica.suspend();
+  ASSERT_EQ(cancelled.size(), 1U);
+  EXPECT_EQ(std::get<CancelTimer>(cancelled.front()).token, old.token);
+  EXPECT_FALSE(replica.instances().at(id).initial_grace);
+  const auto rearmed = replica.resume();
+  ASSERT_EQ(rearmed.size(), 1U);
+  EXPECT_EQ(std::get<ScheduleTimer>(rearmed.front()).delay.ticks, 1U);
+  const auto next = replica.instances().at(id).initial_grace;
+  ASSERT_TRUE(next);
+  EXPECT_NE(next, old);
+  EXPECT_EQ(replica.dispatch(TimerFired{old}).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.dispatch(TimerFired{*next}).status, DispatchStatus::processed);
+  EXPECT_TRUE(replica.instances().at(id).initial_quorum_selected);
+}
+
+TEST(InitialGrace, LearningCommitCancelsGraceWithoutChangingSelectedDependencies) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  replica.dispatch(observation(peer, id));
+  const auto third = replica.dispatch(observation(ReplicaId{2}, id));
+  const auto old = std::get<ScheduleTimer>(third.effects.front()).guard;
+  const auto learned = replica.dispatch(commit(id, owner));
+  ASSERT_EQ(learned.effects.size(), 1U);
+  EXPECT_EQ(std::get<CancelTimer>(learned.effects.front()).token, old.token);
+  EXPECT_FALSE(replica.instances().at(id).initial_grace);
+  EXPECT_EQ(replica.dispatch(TimerFired{old}).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::committed);
+}
+
+TEST(InitialGrace, GenericTimerCannotChooseSlowOrReplaceThePendingGrace) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  const auto before_quorum = std::get<ScheduleTimer>(replica.arm_timer(id, {0}).back()).guard;
+  EXPECT_EQ(replica.dispatch(TimerFired{before_quorum}).status, DispatchStatus::unsupported);
+  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  replica.dispatch(observation(peer, id));
+  const auto third = replica.dispatch(observation(ReplicaId{2}, id));
+  const auto grace = std::get<ScheduleTimer>(third.effects.front()).guard;
+  const auto generic = std::get<ScheduleTimer>(replica.arm_timer(id, {0}).back()).guard;
+  EXPECT_NE(grace, generic);
+  EXPECT_EQ(replica.dispatch(TimerFired{generic}).status, DispatchStatus::unsupported);
+  EXPECT_EQ(replica.instances().at(id).initial_grace, grace);
+  auto wrong = grace;
+  wrong.ballot = Ballot::recovery(1, owner);
+  EXPECT_EQ(replica.dispatch(TimerFired{wrong}).status, DispatchStatus::stale);
+  wrong = grace;
+  wrong.instance = InstanceId{20, owner};
+  EXPECT_EQ(replica.dispatch(TimerFired{wrong}).status, DispatchStatus::stale);
+  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_EQ(replica.dispatch(TimerFired{grace}).status, DispatchStatus::processed);
+}
+
+TEST(InitialGrace, FourthMismatchIncludesEveryObservationAndCancelsGrace) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
+  replica.dispatch(observation(peer, id));
+  const auto third = replica.dispatch(observation(ReplicaId{2}, id));
+  const auto grace = std::get<ScheduleTimer>(third.effects.front()).guard;
+  const auto fourth = replica.dispatch(observation(ReplicaId{3}, id, {dependency}));
+  ASSERT_EQ(fourth.effects.size(), 2U);
+  EXPECT_EQ(std::get<CancelTimer>(fourth.effects.front()).token, grace.token);
+  const auto& handoff = std::get<SlowPathReady>(fourth.effects.back());
+  ASSERT_EQ(handoff.observations.size(), 4U);
+  EXPECT_EQ(handoff.observations.at(ReplicaId{3}), (Dependencies{dependency}));
+  EXPECT_EQ(replica.instances().at(id).preaccept_observations, handoff.observations);
+  EXPECT_FALSE(replica.instances().at(id).initial_grace);
+  EXPECT_EQ(replica.dispatch(TimerFired{grace}).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.dispatch(observation(ReplicaId{4}, id)).status, DispatchStatus::stale);
 }
 }  // namespace egalis::protocol

@@ -18,6 +18,8 @@ struct DispatchResult {
 struct InstanceRecord {
   InstanceState state;
   std::optional<TimerGuard> timer;
+  // Purpose-bound separately from manually armed mechanism timers.
+  std::optional<TimerGuard> initial_grace;
   // Transient coordinator state, engaged only by a local submission.
   std::optional<PreAcceptObservations> preaccept_observations;
   // Once selected, the observations are the frozen quorum for this round.
@@ -42,10 +44,10 @@ class Replica {
                                                  const kv::Command& command) const;
   [[nodiscard]] Dependencies expand_dependencies(InstanceId instance,
       const kv::Command& command, const Dependencies& proposed) const;
-  // Mechanism only: no grace/recovery timeout policy is selected here.
+  // Generic mechanism timers are independent of the initial grace policy.
   Effects arm_timer(InstanceId instance, TimerDelay delay);
   Effects suspend();
-  void resume();
+  Effects resume();
   [[nodiscard]] bool active() const noexcept { return active_; }
   [[nodiscard]] ReplicaId id() const noexcept { return id_; }
   [[nodiscard]] const std::map<InstanceId, InstanceRecord>& instances() const noexcept {
@@ -58,6 +60,8 @@ class Replica {
   DispatchResult handle(const PeerMessage& input);
   DispatchResult receive_preaccept(ReplicaId source, const PreAccept& message);
   DispatchResult receive_preaccept_ok(ReplicaId source, const PreAcceptOk& message);
+  DispatchResult select_initial(InstanceId instance, PreAcceptObservations observations,
+                                bool grace_expired = false);
   DispatchResult receive_commit(const Commit& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);

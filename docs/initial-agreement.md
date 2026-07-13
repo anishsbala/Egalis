@@ -39,5 +39,7 @@ duplicate is inert. A contradictory value is rejected and the decision remains
 intact. A locally owned instance learned through Commit advances the shared ID
 allocator.
 
-C017 adds the grace timer and selection of the slow handoff. Commit receipt has
+C017 implements the grace timer and frozen local slow handoff; see
+adr/0002-initial-agreement-grace.md for token ownership, lifecycle and timing
+limits. C019 will implement Accept from that handoff. Commit receipt has
 no client or execution effects at this stage.

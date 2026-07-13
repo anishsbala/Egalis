@@ -27,14 +27,19 @@ DispatchResult Replica::receive_commit(const Commit& message) {
   static_assert(std::is_nothrow_move_assignable_v<Dependencies>);
   auto command = message.command;
   auto dependencies = message.dependencies;
+  DispatchResult result{DispatchStatus::processed, {}};
+  if (found != instances_.end() && found->second.initial_grace)
+    result.effects.emplace_back(std::in_place_type<CancelTimer>,
+        CancelTimer{found->second.initial_grace->token});
   auto& target = found == instances_.end() ? instances_.try_emplace(message.id).first->second
                                            : found->second;
   target.state.ballots.accepted = message.ballot;
   target.state.command = std::move(command);
   target.state.dependencies = std::move(dependencies);
   target.state.phase = Phase::committed;
+  target.initial_grace.reset();
   if (message.id.coordinator() == id_) allocator_.observe(message.id);
-  return {DispatchStatus::processed, {}};
+  return result;
 }
 
 }  // namespace egalis::protocol

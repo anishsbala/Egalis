@@ -236,6 +236,29 @@ TEST(ReplicaEndpoint, RestartHookFailureAlsoStopsNetwork) {
   EXPECT_THROW(network.restart(local), std::runtime_error);
   EXPECT_TRUE(network.scheduler().failed());
 }
+TEST(ReplicaEndpoint, FailedRestartCannotExecuteTimersQueuedByItsHook) {
+  Network network;
+  bool callback_ran = false;
+  class RearmThenFail final : public transport::Endpoint {
+   public:
+    RearmThenFail(Network& network, bool& callback_ran)
+        : network_(network), callback_ran_(callback_ran) {}
+    void receive(const protocol::Envelope&) override {}
+    void on_restart() override {
+      network_.timer(local, {0}, "failed-restart-timer", [this] { callback_ran_ = true; });
+      throw std::runtime_error("restart failed after rearm");
+    }
+   private:
+    Network& network_;
+    bool& callback_ran_;
+  };
+  network.attach(local, std::make_unique<RearmThenFail>(network, callback_ran));
+  network.crash(local);
+  EXPECT_THROW(network.restart(local), std::runtime_error);
+  EXPECT_TRUE(network.scheduler().failed());
+  EXPECT_THROW(network.scheduler().run(), std::logic_error);
+  EXPECT_FALSE(callback_ran);
+}
 TEST(ReplicaEndpoint, AllocatedSubmissionInputsReplayAndResumeWithoutIdReuse) {
   const auto run = [](Network& network) {
     auto& endpoint = ReplicaEndpoint::attach(network, local);
