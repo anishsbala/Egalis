@@ -2,7 +2,7 @@
 
 Authority: baseline EPaxos* arXiv2511.02743v1 Section3, Figure3 left12–18.
 C019 consumes the sealed initial quorum; C020 implements Accept receipt and
-its real acknowledgment. AcceptOK collection remains for C021.
+its real acknowledgment. C021 collects distinct AcceptOKs and commits at three.
 
 InitialSelection records collecting, fast or slow explicitly. A selected fast
 quorum cannot authorize a slow continuation, even before immediate self-Commit
@@ -27,8 +27,9 @@ Suspend/resume preserves a selected proposal and does not rebroadcast it; this
 is volatile retained-memory lifecycle behavior, not durable restart.
 
 With three responders the grace firing itself leads to Accept, without another
-peer/client input. C020 installs the selected candidate on real self-Accept; no acknowledgment
-collector yet establishes slow commitment, execution or client completion.
+peer/client input. C020 installs the selected candidate on real self-Accept;
+C021 commits after three distinct acknowledgments. Execution and client completion
+remain outside this milestone.
 Deterministic tests check union/guards and the real runner's automatic broadcast,
 including captured-trace reconstruction and replay. They are bounded regressions,
 not a distributed-system safety proof.
@@ -58,3 +59,24 @@ owned evidence but cannot collect again in accepted phase. A matching local
 slow proposal remains frozen for C021's future collector; a superseding ballot
 clears that proposal so old AcceptOKs cannot inherit coordinator ownership.
 There is no synthetic vote and AcceptOK remains unsupported in C020.
+
+
+## Slow acknowledgment collection (C021)
+
+An empty SlowVotes collector is published with the locally issued frozen
+SlowProposal. Only a real AcceptOK delivery adds its sender; immediate self
+Accept and AcceptOK use the same serialized runner path as remote traffic.
+The initial coordinator, ballot-zero proposal, slow branch, exact current and
+accepted ballot and accepted phase must match. Unknown or merely accepted
+instances cannot collect. A superseding ballot clears collector ownership.
+AcceptOK has no payload/dependency fields; the immutable proposal supplies value
+identity, with a diagnostic check against the accepted candidate.
+
+Duplicate senders replay without adding votes. Two distinct replies cannot
+choose, regardless of packet duplication. At the third distinct sender the core
+constructs one self-first Commit broadcast from the frozen proposal and seals
+the collector before any effect executes. The shared exact-ballot Commit handler
+records the decision. Fourth/fifth, delayed or duplicate replies cannot alter or
+rebroadcast it, including before the self-Commit effect is delivered. Retained
+initial metadata and decision evidence remain distinct from the collector.
+This slice initiates no positive-ballot recovery or durable restart behavior.

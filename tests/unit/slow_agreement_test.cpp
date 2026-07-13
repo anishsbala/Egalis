@@ -220,5 +220,92 @@ TEST(AcceptTransition, SupersedesTimersAndCollectorButKeepsMatchingFrozenProposa
   EXPECT_TRUE(selected.instances().at(id).state.initial_dependencies.empty());
   EXPECT_FALSE(selected.instances().at(id).slow_proposal);
 }
+
+DispatchResult acknowledge(Replica& replica, ReplicaId sender, Ballot ballot = {}) {
+  return replica.dispatch(PeerMessage{{sender, replica.id(), AcceptOk{ballot, id}}});
+}
+Envelope open_slow(Replica& replica) {
+  const auto ready = select_slow(replica);
+  const auto sends = replica.dispatch(Event{ready});
+  const auto accepted = replica.dispatch(PeerMessage{std::get<SendMessage>(sends.effects[0]).envelope});
+  return std::get<SendMessage>(accepted.effects.back()).envelope;
+}
+TEST(SlowQuorum, CountsRealSelfOnceAndThirdDistinctSealsSelfFirstCommit) {
+  Replica replica{owner};
+  const auto self = open_slow(replica);
+  EXPECT_TRUE(replica.dispatch(PeerMessage{self}).effects.empty());
+  for (unsigned packet = 0; packet < 4; ++packet)
+    EXPECT_EQ(replica.dispatch(PeerMessage{self}), (DispatchResult{DispatchStatus::replayed, {}}));
+  EXPECT_TRUE(acknowledge(replica, ReplicaId{1}).effects.empty());
+  for (unsigned packet = 0; packet < 4; ++packet)
+    EXPECT_TRUE(acknowledge(replica, ReplicaId{1}).effects.empty());
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::accepted);
+  const auto third_vote = acknowledge(replica, ReplicaId{2});
+  ASSERT_EQ(third_vote.status, DispatchStatus::processed);
+  ASSERT_EQ(third_vote.effects.size(), Configuration::replicas);
+  const Commit expected{{}, id, command, {first, second, third}};
+  for (unsigned peer = 0; peer < Configuration::replicas; ++peer)
+    EXPECT_EQ(std::get<SendMessage>(third_vote.effects[peer]).envelope,
+        (Envelope{owner, ReplicaId{peer}, expected}));
+  // Selection seals before self-Commit execution, not merely after phase changes.
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::accepted);
+  EXPECT_EQ(acknowledge(replica, ReplicaId{3}), (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_EQ(acknowledge(replica, ReplicaId{2}), (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_EQ(replica.dispatch(PeerMessage{std::get<SendMessage>(third_vote.effects[0]).envelope}).status,
+      DispatchStatus::processed);
+  const auto& record = replica.instances().at(id);
+  EXPECT_EQ(record.state.phase, Phase::committed);
+  ASSERT_TRUE(record.committed_decision);
+  EXPECT_EQ(record.committed_decision->dependencies, expected.dependencies);
+  EXPECT_EQ(record.state.initial_command, command);
+  EXPECT_TRUE(record.state.initial_dependencies.empty());
+  EXPECT_EQ(acknowledge(replica, ReplicaId{4}), (DispatchResult{DispatchStatus::stale, {}}));
+}
+TEST(SlowQuorum, NoSyntheticSelfVoteAndUnownedRepliesCannotCount) {
+  Replica replica{owner};
+  EXPECT_EQ(acknowledge(replica, ReplicaId{1}), (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_TRUE(replica.instances().empty());
+  const auto self = open_slow(replica);
+  EXPECT_TRUE(acknowledge(replica, ReplicaId{1}).effects.empty());
+  EXPECT_TRUE(acknowledge(replica, ReplicaId{2}).effects.empty());
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::accepted);
+  EXPECT_EQ(replica.dispatch(PeerMessage{self}).effects.size(), Configuration::replicas);
+  Replica remote_accept{owner};
+  accept(remote_accept, {}, {first});
+  for (const auto sender : members())
+    EXPECT_EQ(acknowledge(remote_accept, sender), (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_EQ(remote_accept.instances().at(id).state.phase, Phase::accepted);
+}
+TEST(SlowQuorum, RejectsWrongBallotsUnacceptedAndSupersededCollections) {
+  Replica replica{owner};
+  const auto ready = select_slow(replica);
+  replica.dispatch(Event{ready});
+  EXPECT_EQ(acknowledge(replica, owner), (DispatchResult{DispatchStatus::stale, {}}));
+  accept(replica, {}, {first, second, third});
+  EXPECT_EQ(acknowledge(replica, ReplicaId{1}, Ballot::recovery(1, owner)),
+      (DispatchResult{DispatchStatus::stale, {}}));
+  acknowledge(replica, owner);
+  acknowledge(replica, ReplicaId{1});
+  accept(replica, Ballot::recovery(1, owner), {first, second, third});
+  for (const auto sender : members()) {
+    EXPECT_EQ(acknowledge(replica, sender), (DispatchResult{DispatchStatus::stale, {}}));
+    EXPECT_EQ(acknowledge(replica, sender, Ballot::recovery(1, owner)),
+        (DispatchResult{DispatchStatus::stale, {}}));
+  }
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::accepted);
+}
+TEST(SlowQuorum, ForgedCandidateCannotReuseValueFreeAcknowledgments) {
+  Replica replica{owner};
+  const auto self = open_slow(replica);
+  // Impossible trusted-core state fixture diagnoses proposal identity loss.
+  auto& state = const_cast<InstanceState&>(replica.instances().at(id).state);
+  state.dependencies.clear();
+  for (const auto sender : members())
+    EXPECT_EQ(acknowledge(replica, sender), (DispatchResult{DispatchStatus::rejected, {}}));
+  state.dependencies = {first, second, third};
+  EXPECT_TRUE(replica.dispatch(PeerMessage{self}).effects.empty());
+  EXPECT_TRUE(acknowledge(replica, ReplicaId{1}).effects.empty());
+  EXPECT_EQ(acknowledge(replica, ReplicaId{2}).effects.size(), Configuration::replicas);
+}
 }  // namespace
 }  // namespace egalis::protocol

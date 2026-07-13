@@ -215,7 +215,8 @@ TEST(AgreementSimulation, ThreeSurvivorsExpireToOneFrozenHandoffWithoutAnotherIn
     EXPECT_EQ(*record.preaccept_observations,
               (PreAcceptObservations{{owner, {}}, {ReplicaId{1}, {}}, {ReplicaId{2}, {}}}));
     EXPECT_EQ(handoffs(network), 1U);
-    expect_no_commit(replicas);
+    for (unsigned survivor : {0U, 1U, 2U})
+      EXPECT_EQ(replicas[survivor]->core().instances().at(target).state.phase, Phase::committed);
   });
 }
 
@@ -249,7 +250,7 @@ void mismatch_scenario(Network& network, bool fourth) {
   if (fourth) request(network, 3, 1);
   // A late original reply cannot remove the mismatch or reopen fast selection.
   request(network, 4, 5);
-  drain_checked(network, replicas);
+  drain_checked(network, replicas, {conflict});
   const auto& record = replicas[0]->core().instances().at(target);
   ASSERT_TRUE(record.preaccept_observations);
   EXPECT_EQ(record.preaccept_observations->size(), fourth ? 4U : 3U);
@@ -257,11 +258,12 @@ void mismatch_scenario(Network& network, bool fourth) {
   EXPECT_TRUE(record.state.initial_dependencies.empty());
   EXPECT_TRUE(record.preaccept_observations->at(owner).empty());  // Frozen local vote is untouched.
   EXPECT_EQ(record.state.dependencies, Dependencies{conflict});  // Real self-Accept installs the union.
-  EXPECT_EQ(record.state.phase, Phase::accepted);
+  EXPECT_EQ(record.state.phase, Phase::committed);
   EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
   EXPECT_FALSE(record.initial_grace);
   EXPECT_EQ(handoffs(network), 1U);
-  expect_no_commit(replicas);
+  for (const auto* endpoint : replicas)
+    EXPECT_EQ(endpoint->core().instances().at(target).state.phase, Phase::committed);
 }
 TEST(AgreementSimulation, MismatchBeforeThirdResponseSelectsSlowAndReplays) {
   run_and_replay([](Network& network) { mismatch_scenario(network, false); });
@@ -294,12 +296,8 @@ TEST(AgreementSimulation, SameTimestampFourthReplyAndExpiryRespectBothInsertionO
       EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
       EXPECT_EQ(record.preaccept_observations->size(), reply_first ? 4U : 3U);
       EXPECT_EQ(handoffs(network), reply_first ? 0U : 1U);
-      if (reply_first) {
-        for (const auto* endpoint : replicas)
-          EXPECT_EQ(endpoint->core().instances().at(target).state.phase, Phase::committed);
-      } else {
-        expect_no_commit(replicas);
-      }
+      for (const auto* endpoint : replicas)
+        EXPECT_EQ(endpoint->core().instances().at(target).state.phase, Phase::committed);
       const auto fourth_input = "input/peer/" + canonical(Envelope{ReplicaId{3}, owner, PreAcceptOk{target, {}}});
       std::size_t fourth_at_three = 0;
       for (const auto& decision : network.trace().decisions)

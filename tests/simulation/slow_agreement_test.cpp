@@ -37,7 +37,9 @@ TEST(SlowProposalSimulation, ThreeSurvivorsAutomaticallyBroadcastFrozenAcceptAnd
     ASSERT_EQ(sent.size(), Configuration::replicas);
     EXPECT_EQ(sent.front(), "effect/send/" + canonical({owner, owner, Accept{{}, instance, command, {}}}));
     const auto& state = replicas[0]->core().instances().at(instance).state;
-    EXPECT_EQ(state.phase, Phase::accepted);  // Real immediate self-Accept.
+    EXPECT_EQ(state.phase, Phase::committed);  // Three real AcceptOKs, including self.
+    for (unsigned survivor : {0U, 1U, 2U})
+      EXPECT_EQ(replicas[survivor]->core().instances().at(instance).state.phase, Phase::committed);
     EXPECT_TRUE(state.dependencies.empty());
     EXPECT_TRUE(state.ballots.accepted.initial());
     network.verify_replay_complete();
@@ -45,6 +47,33 @@ TEST(SlowProposalSimulation, ThreeSurvivorsAutomaticallyBroadcastFrozenAcceptAnd
   Network original; run(original);
   Network replay{parse_trace(serialize(original.trace())), FaultPolicy{}}; run(replay);
   EXPECT_EQ(original.trace(), replay.trace());
+}
+TEST(SlowQuorumSimulation, RealSelfAndOnePeerWaitForThirdReply) {
+  Network network;
+  const auto replicas = attach(network);
+  network.crash(ReplicaId{3}); network.crash(ReplicaId{4});
+  replicas[0]->dispatch(Submit{instance, command});
+  const auto votes = [&] {
+    unsigned count = 0;
+    for (const auto& decision : network.trace().decisions) {
+      if (decision.kind != DecisionKind::protocol) continue;
+      for (unsigned sender : {0U, 1U, 2U})
+        if (decision.detail == "input/peer/" + canonical({ReplicaId{sender}, owner,
+            AcceptOk{{}, instance}})) ++count;
+    }
+    return count;
+  };
+  unsigned events = 0;
+  while (votes() < 2U) {
+    ASSERT_TRUE(network.scheduler().step());
+    ASSERT_LT(++events, 100U);
+  }
+  EXPECT_EQ(votes(), 2U);
+  EXPECT_EQ(replicas[0]->core().instances().at(instance).state.phase, Phase::accepted);
+  network.scheduler().run(100);
+  EXPECT_EQ(votes(), 3U);
+  EXPECT_EQ(replicas[0]->core().instances().at(instance).state.phase, Phase::committed);
+  network.verify_replay_complete();
 }
 TEST(SlowProposalSimulation, FourthMismatchUnionAndLateRepliesCannotChangeBroadcast) {
   Network network;

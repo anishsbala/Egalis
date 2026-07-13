@@ -44,12 +44,52 @@ DispatchResult Replica::receive_accept(ReplicaId source, const Accept& message) 
   next.state.phase = Phase::accepted;
   next.timer.reset();
   next.initial_grace.reset();
-  if (next.slow_proposal && next.slow_proposal->ballot != message.ballot)
+  if (next.slow_proposal && next.slow_proposal->ballot != message.ballot) {
     next.slow_proposal.reset();
+    next.slow_votes.reset();
+  }
   static_assert(std::is_nothrow_move_assignable_v<InstanceRecord>);
   if (found == instances_.end()) instances_.emplace(message.id, std::move(next));
   else found->second = std::move(next);
   if (message.id.coordinator() == id_) allocator_.observe(message.id);
+  return result;
+}
+
+DispatchResult Replica::receive_accept_ok(ReplicaId source, const AcceptOk& message) {
+  const auto found = instances_.find(message.id);
+  if (found == instances_.end()) return {DispatchStatus::stale, {}};
+  auto& record = found->second;
+  const auto& state = record.state;
+  // C021 owns only the initial locally issued slow generation. Positive-ballot
+  // recovery proposal initiation belongs to a later milestone.
+  if (message.id.coordinator() != id_ || !message.ballot.initial() ||
+      record.initial_selection != InitialSelection::slow || !record.slow_proposal ||
+      !record.slow_votes || record.slow_votes->sealed || state.phase != Phase::accepted ||
+      state.ballots.current != message.ballot || state.ballots.accepted != message.ballot ||
+      record.slow_proposal->ballot != message.ballot)
+    return {DispatchStatus::stale, {}};
+  const auto& proposal = *record.slow_proposal;
+  // AcceptOK has no value fields: immutable proposal identity supplies the match.
+  if (state.command != proposal.command || state.dependencies != proposal.dependencies)
+    return {DispatchStatus::rejected, {}};
+  auto next = *record.slow_votes;
+  if (!next.responders.add(source)) return {DispatchStatus::replayed, {}};
+  DispatchResult result{DispatchStatus::processed, {}};
+  if (next.responders.slow()) {
+    result.effects.reserve(Configuration::replicas);
+    const auto send = [&](ReplicaId destination) {
+      result.effects.emplace_back(std::in_place_type<SendMessage>, id_, destination,
+          std::in_place_type<Commit>, proposal.ballot, message.id, proposal.command,
+          proposal.dependencies);
+    };
+    send(id_);
+    for (const auto member : members()) if (member != id_) send(member);
+    next.sealed = true;
+  }
+  // Every throwing allocation/copy above precedes publication. Seal before
+  // effects execute, including immediate common self-Commit delivery.
+  static_assert(std::is_nothrow_copy_assignable_v<SlowVotes>);
+  record.slow_votes = next;
   return result;
 }
 
@@ -81,6 +121,7 @@ DispatchResult Replica::handle(const SlowPathReady& input) {
   // command/dependencies in InstanceState still describe our preaccept vote.
   static_assert(std::is_nothrow_move_constructible_v<SlowProposal>);
   record.slow_proposal.emplace(std::move(proposal));
+  record.slow_votes.emplace();  // Empty: only real AcceptOK deliveries add votes.
   return result;
 }
 

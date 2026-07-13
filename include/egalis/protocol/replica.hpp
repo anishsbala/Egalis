@@ -22,6 +22,10 @@ struct SlowProposal {
   Dependencies dependencies;
   bool operator==(const SlowProposal&) const = default;
 };
+struct SlowVotes {
+  Quorum responders;
+  bool sealed = false;
+};
 struct CommittedDecision {
   kv::Payload command;
   Dependencies dependencies;
@@ -40,6 +44,8 @@ struct InstanceRecord {
   InitialSelection initial_selection = InitialSelection::collecting;
   // Immutable coordinator candidate, separate from the local preaccept vote.
   std::optional<SlowProposal> slow_proposal;
+  // Engaged only when this replica issues the corresponding frozen proposal.
+  std::optional<SlowVotes> slow_votes;
 };
 
 // Serialized, non-reentrant ownership boundary. No callbacks, threads, transport,
@@ -79,6 +85,7 @@ class Replica {
   DispatchResult select_initial(InstanceId instance, PreAcceptObservations observations,
                                 bool grace_expired = false);
   DispatchResult receive_accept(ReplicaId source, const Accept& message);
+  DispatchResult receive_accept_ok(ReplicaId source, const AcceptOk& message);
   DispatchResult receive_commit(const Commit& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);

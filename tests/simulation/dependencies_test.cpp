@@ -33,7 +33,13 @@ void scenario(Network& network) {
         if (known.counter() == 1 || known.counter() == 2) expected_write.insert(known);
         EXPECT_LE(known.counter(), 3U);
         EXPECT_TRUE(record.state.phase == protocol::Phase::preaccepted ||
-                    record.state.phase == protocol::Phase::accepted);
+                    record.state.phase == protocol::Phase::accepted ||
+                    record.state.phase == protocol::Phase::committed);
+        if (record.state.phase == protocol::Phase::committed) {
+          ASSERT_TRUE(record.committed_decision);
+          EXPECT_EQ(record.committed_decision->command, record.state.command);
+          EXPECT_EQ(record.committed_decision->dependencies, record.state.dependencies);
+        }
       }
       EXPECT_EQ(core.known_dependencies(target, read), expected_read);
       EXPECT_EQ(core.expand_dependencies(target, write, proposed), expected_write);

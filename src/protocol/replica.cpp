@@ -51,6 +51,8 @@ DispatchResult Replica::handle(const PeerMessage& input) {
     return receive_preaccept_ok(input.envelope.source, *message);
   if (const auto* message = std::get_if<Accept>(&input.envelope.message))
     return receive_accept(input.envelope.source, *message);
+  if (const auto* message = std::get_if<AcceptOk>(&input.envelope.message))
+    return receive_accept_ok(input.envelope.source, *message);
   if (const auto* message = std::get_if<Commit>(&input.envelope.message))
     return receive_commit(*message);
   return {DispatchStatus::unsupported, {}};
