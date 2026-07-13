@@ -86,7 +86,7 @@ TEST(AgreementSimulation, RetainedGraceResumesThroughRunnerEffectsAndReplays) {
     EXPECT_EQ(endpoint.last_status(), DispatchStatus::stale);
     network.scheduler().run();
     const auto& record = endpoint.core().instances().at(instance);
-    EXPECT_TRUE(record.initial_quorum_selected);
+    EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
     EXPECT_FALSE(record.initial_grace);
     EXPECT_EQ(record.state.phase, Phase::preaccepted);
     ASSERT_TRUE(record.preaccept_observations);
@@ -202,9 +202,15 @@ TEST(AgreementSimulation, ThreeSurvivorsExpireToOneFrozenHandoffWithoutAnotherIn
     request(network, 1, 1);
     request(network, 2, 1);
     drain_checked(network, replicas);
-    EXPECT_EQ(network.scheduler().now().ticks, 3U);  // Requests1, OK2, grace3.
+    // C019 adds remote Accept deliveries after the handoff. Preserve the grace
+    // bound by checking the handoff event itself, rather than final queue time.
+    for (const auto& decision : network.trace().decisions) {
+      if (decision.kind == DecisionKind::protocol && decision.detail.starts_with("effect/slow-ready/")) {
+        EXPECT_EQ(decision.fields.at(0), 3U);  // Requests1, OK2, grace3.
+      }
+    }
     const auto& record = replicas[0]->core().instances().at(target);
-    EXPECT_TRUE(record.initial_quorum_selected);
+    EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
     EXPECT_FALSE(record.initial_grace);
     EXPECT_EQ(*record.preaccept_observations,
               (PreAcceptObservations{{owner, {}}, {ReplicaId{1}, {}}, {ReplicaId{2}, {}}}));
@@ -222,7 +228,7 @@ TEST(AgreementSimulation, TwoSurvivorsAndDuplicateTrafficCannotSelectEitherBranc
     drain_checked(network, replicas);
     const auto& record = replicas[0]->core().instances().at(target);
     EXPECT_EQ(record.preaccept_observations->size(), 2U);
-    EXPECT_FALSE(record.initial_quorum_selected);
+    EXPECT_FALSE(record.initial_selection != InitialSelection::collecting);
     EXPECT_FALSE(record.initial_grace);
     EXPECT_EQ(handoffs(network), 0U);
     expect_no_commit(replicas);
@@ -250,7 +256,7 @@ void mismatch_scenario(Network& network, bool fourth) {
   EXPECT_EQ(record.preaccept_observations->at(ReplicaId{expanded_peer}), (Dependencies{conflict}));
   EXPECT_TRUE(record.state.initial_dependencies.empty());
   EXPECT_TRUE(record.state.dependencies.empty());  // Local cached vote is untouched.
-  EXPECT_TRUE(record.initial_quorum_selected);
+  EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
   EXPECT_FALSE(record.initial_grace);
   EXPECT_EQ(handoffs(network), 1U);
   expect_no_commit(replicas);
@@ -283,7 +289,7 @@ TEST(AgreementSimulation, SameTimestampFourthReplyAndExpiryRespectBothInsertionO
       }
       drain_checked(network, replicas);
       const auto& record = replicas[0]->core().instances().at(target);
-      EXPECT_TRUE(record.initial_quorum_selected);
+      EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
       EXPECT_EQ(record.preaccept_observations->size(), reply_first ? 4U : 3U);
       EXPECT_EQ(handoffs(network), reply_first ? 0U : 1U);
       if (reply_first) {
@@ -354,7 +360,7 @@ TEST(AgreementSimulation, CoordinatorCrashBeforeAndAfterSelfCommitPreservesObser
         for (const auto* endpoint : replicas)
           EXPECT_EQ(endpoint->core().instances().at(target).state.phase, Phase::committed);
       } else {
-        EXPECT_FALSE(replicas[0]->core().instances().at(target).initial_quorum_selected);
+        EXPECT_FALSE(replicas[0]->core().instances().at(target).initial_selection != InitialSelection::collecting);
         expect_no_commit(replicas);
       }
     });

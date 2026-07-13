@@ -57,7 +57,7 @@ DispatchResult Replica::handle(const TimerFired& input) {
   const auto found = instances_.find(input.guard.instance);
   if (found != instances_.end() && found->second.initial_grace == input.guard) {
     const auto& record = found->second;
-    if (record.initial_quorum_selected || !record.preaccept_observations ||
+    if (record.initial_selection != InitialSelection::collecting || !record.preaccept_observations ||
         !initial_observation_allowed(record.state) ||
         record.state.ballots.current != input.guard.ballot ||
         record.preaccept_observations->size() < Configuration::slow_quorum)
@@ -118,7 +118,7 @@ Effects Replica::resume() {
   Effects effects;
   auto next = next_timer_;
   for (const auto& [id, record] : instances_) {
-    if (!record.initial_quorum_selected && record.preaccept_observations &&
+    if (record.initial_selection == InitialSelection::collecting && record.preaccept_observations &&
         initial_observation_allowed(record.state) &&
         record.preaccept_observations->size() >= Configuration::slow_quorum &&
         observations_match_initial_dependencies(*record.preaccept_observations, record.state)) {

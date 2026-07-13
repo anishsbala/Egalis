@@ -13,6 +13,7 @@ void validate(const Event& event) {
   std::visit([](const auto& input) {
     using T = std::decay_t<decltype(input)>;
     if constexpr (std::is_same_v<T, PeerMessage>) validate(input.envelope);
+    if constexpr (std::is_same_v<T, SlowPathReady>) validate(Effect{input});
     if constexpr (std::is_same_v<T, TimerFired>) token(input.guard.token.value);
     if constexpr (std::is_same_v<T, Completed>) {
       token(input.token.value);

@@ -41,7 +41,8 @@ allocator.
 
 C017 implements the grace timer and frozen local slow handoff; see
 adr/0002-initial-agreement-grace.md for token ownership, lifecycle and timing
-limits. C019 will implement Accept from that handoff. Commit receipt has
+limits. C019 implements the frozen Accept proposal from that handoff, as described
+in slow-agreement.md. Commit receipt has
 no client or execution effects at this stage.
 
 ## Deterministic failure coverage

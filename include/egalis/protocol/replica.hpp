@@ -15,6 +15,13 @@ struct DispatchResult {
   Effects effects;
   bool operator==(const DispatchResult&) const = default;
 };
+enum class InitialSelection { collecting, fast, slow };
+struct SlowProposal {
+  Ballot ballot;
+  kv::Payload command;
+  Dependencies dependencies;
+  bool operator==(const SlowProposal&) const = default;
+};
 struct InstanceRecord {
   InstanceState state;
   std::optional<TimerGuard> timer;
@@ -23,7 +30,9 @@ struct InstanceRecord {
   // Transient coordinator state, engaged only by a local submission.
   std::optional<PreAcceptObservations> preaccept_observations;
   // Once selected, the observations are the frozen quorum for this round.
-  bool initial_quorum_selected = false;
+  InitialSelection initial_selection = InitialSelection::collecting;
+  // Immutable coordinator candidate, separate from the local preaccept vote.
+  std::optional<SlowProposal> slow_proposal;
 };
 
 // Serialized, non-reentrant ownership boundary. No callbacks, threads, transport,
@@ -65,6 +74,7 @@ class Replica {
   DispatchResult receive_commit(const Commit& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);
+  DispatchResult handle(const SlowPathReady& input);
   ReplicaId id_;
   InstanceAllocator allocator_;
   std::map<InstanceId, InstanceRecord> instances_;

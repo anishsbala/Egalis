@@ -377,14 +377,14 @@ TEST(InitialGrace, ThirdOriginalReplyArmsOnePositiveTickWithoutDuplicateExtensio
   EXPECT_EQ(timer->guard.ballot, Ballot{});
   EXPECT_TRUE(replica.dispatch(observation(peer, id)).effects.empty());
   EXPECT_TRUE(replica.dispatch(observation(peer, id, {dependency})).effects.empty());
-  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_FALSE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
 }
 
 TEST(InitialGrace, MismatchSelectsOnceAtThreeAndFreezesAllObservedValues) {
   Replica replica{owner};
   replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
   EXPECT_TRUE(replica.dispatch(observation(peer, id, {dependency})).effects.empty());
-  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_FALSE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
   const auto selection = replica.dispatch(observation(ReplicaId{2}, id));
   ASSERT_EQ(selection.effects.size(), 1U);
   const auto& handoff = std::get<SlowPathReady>(selection.effects.front());
@@ -392,7 +392,7 @@ TEST(InitialGrace, MismatchSelectsOnceAtThreeAndFreezesAllObservedValues) {
   EXPECT_EQ(handoff.ballot, Ballot{});
   EXPECT_EQ(handoff.observations, (PreAcceptObservations{{owner, {}},
       {peer, {dependency}}, {ReplicaId{2}, {}}}));
-  EXPECT_TRUE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_TRUE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
   const auto frozen = replica.instances().at(id).preaccept_observations;
   EXPECT_EQ(replica.dispatch(observation(ReplicaId{3}, id)).status, DispatchStatus::stale);
   EXPECT_EQ(replica.instances().at(id).preaccept_observations, frozen);
@@ -413,7 +413,7 @@ TEST(InitialGrace, ExpirySelectsSlowOnceAndLaterFourthCannotCommit) {
   const auto expired = replica.dispatch(TimerFired{guard});
   EXPECT_EQ(expired.status, DispatchStatus::processed);
   ASSERT_EQ(expired.effects.size(), 1U);
-  EXPECT_TRUE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_TRUE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
   EXPECT_EQ(replica.instances().at(id).preaccept_observations->size(), 3U);
   EXPECT_EQ(replica.dispatch(TimerFired{guard}).status, DispatchStatus::stale);
   EXPECT_EQ(replica.dispatch(observation(ReplicaId{3}, id)).status, DispatchStatus::stale);
@@ -438,7 +438,7 @@ TEST(InitialGrace, SuspendInvalidatesGraceAndResumeRearmsEligibleRetainedCollect
   EXPECT_NE(next, old);
   EXPECT_EQ(replica.dispatch(TimerFired{old}).status, DispatchStatus::stale);
   EXPECT_EQ(replica.dispatch(TimerFired{*next}).status, DispatchStatus::processed);
-  EXPECT_TRUE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_TRUE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
 }
 
 TEST(InitialGrace, LearningCommitCancelsGraceWithoutChangingSelectedDependencies) {
@@ -460,7 +460,7 @@ TEST(InitialGrace, GenericTimerCannotChooseSlowOrReplaceThePendingGrace) {
   replica.dispatch(PeerMessage{preaccept_self(replica, submit(replica))});
   const auto before_quorum = std::get<ScheduleTimer>(replica.arm_timer(id, {0}).back()).guard;
   EXPECT_EQ(replica.dispatch(TimerFired{before_quorum}).status, DispatchStatus::unsupported);
-  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_FALSE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
   replica.dispatch(observation(peer, id));
   const auto third = replica.dispatch(observation(ReplicaId{2}, id));
   const auto grace = std::get<ScheduleTimer>(third.effects.front()).guard;
@@ -474,7 +474,7 @@ TEST(InitialGrace, GenericTimerCannotChooseSlowOrReplaceThePendingGrace) {
   wrong = grace;
   wrong.instance = InstanceId{20, owner};
   EXPECT_EQ(replica.dispatch(TimerFired{wrong}).status, DispatchStatus::stale);
-  EXPECT_FALSE(replica.instances().at(id).initial_quorum_selected);
+  EXPECT_FALSE(replica.instances().at(id).initial_selection != InitialSelection::collecting);
   EXPECT_EQ(replica.dispatch(TimerFired{grace}).status, DispatchStatus::processed);
 }
 
