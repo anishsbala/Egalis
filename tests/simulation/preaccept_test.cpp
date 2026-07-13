@@ -23,7 +23,13 @@ void seeded(Network& network) {
     const auto& core = replicas[member.value()]->core();
     EXPECT_TRUE(core.instances().contains(InstanceId{1, member}));
     for (const auto& [id, record] : core.instances()) {
-      EXPECT_EQ(record.state.phase, protocol::Phase::preaccepted);
+      EXPECT_TRUE(record.state.phase == protocol::Phase::preaccepted ||
+                  record.state.phase == protocol::Phase::accepted);
+      EXPECT_EQ(record.state.command, (kv::Payload{kv::Command{kv::Put{"shared", "v"}}}));
+      if (record.state.initial_command)
+        EXPECT_EQ(record.state.command, kv::Payload{*record.state.initial_command});
+      else
+        EXPECT_EQ(record.state.phase, protocol::Phase::accepted);  // Accept preceded PreAccept.
       EXPECT_TRUE(record.state.ballots.accepted.initial());
       EXPECT_TRUE(record.state.initial_dependencies.empty());
       EXPECT_FALSE(record.state.dependencies.contains(id));
@@ -46,8 +52,8 @@ TEST(PreAcceptSimulation, SimultaneousConflictingCoordinatorsPreacceptWithoutCom
     ASSERT_EQ(replica->core().instances().size(), 2U);
     const auto& left = replica->core().instances().at(a).state;
     const auto& right = replica->core().instances().at(b).state;
-    EXPECT_EQ(left.phase, protocol::Phase::preaccepted);
-    EXPECT_EQ(right.phase, protocol::Phase::preaccepted);
+    EXPECT_EQ(left.phase, protocol::Phase::accepted);
+    EXPECT_EQ(right.phase, protocol::Phase::accepted);
     EXPECT_TRUE(left.initial_dependencies.empty());
     EXPECT_TRUE(right.initial_dependencies.empty());
     EXPECT_TRUE(left.dependencies.contains(b) || right.dependencies.contains(a));

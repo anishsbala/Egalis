@@ -37,7 +37,7 @@ TEST(SlowProposalSimulation, ThreeSurvivorsAutomaticallyBroadcastFrozenAcceptAnd
     ASSERT_EQ(sent.size(), Configuration::replicas);
     EXPECT_EQ(sent.front(), "effect/send/" + canonical({owner, owner, Accept{{}, instance, command, {}}}));
     const auto& state = replicas[0]->core().instances().at(instance).state;
-    EXPECT_EQ(state.phase, Phase::preaccepted);  // Accept receipt belongs to C020.
+    EXPECT_EQ(state.phase, Phase::accepted);  // Real immediate self-Accept.
     EXPECT_TRUE(state.dependencies.empty());
     EXPECT_TRUE(state.ballots.accepted.initial());
     network.verify_replay_complete();
@@ -62,7 +62,7 @@ TEST(SlowProposalSimulation, FourthMismatchUnionAndLateRepliesCannotChangeBroadc
   EXPECT_EQ(accepts(network, {first}).size(), Configuration::replicas);
   EXPECT_TRUE(accepts(network, {first, second}).empty());
   EXPECT_EQ(replicas[0]->core().instances().at(instance).preaccept_observations->size(), 4U);
-  EXPECT_TRUE(replicas[0]->core().instances().at(instance).state.dependencies.empty());
+  EXPECT_EQ(replicas[0]->core().instances().at(instance).state.dependencies, Dependencies{first});
   network.verify_replay_complete();
 }
 }  // namespace

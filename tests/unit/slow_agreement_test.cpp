@@ -93,5 +93,132 @@ TEST(SlowProposal, SuspendResumeCannotRebroadcastAnAlreadyFrozenProposal) {
   EXPECT_EQ(replica.dispatch(Event{ready}), (DispatchResult{DispatchStatus::stale, {}}));
   EXPECT_EQ(replica.instances().at(id).slow_proposal, before);
 }
+
+DispatchResult accept(Replica& replica, Ballot ballot = {}, Dependencies dependencies = {},
+                      kv::Payload payload = command, InstanceId instance = id) {
+  return replica.dispatch(PeerMessage{{ballot.owner(instance), replica.id(),
+      Accept{ballot, instance, std::move(payload), std::move(dependencies)}}});
+}
+TEST(AcceptTransition, MaterializesUnknownAndAdvancesLocalAllocator) {
+  Replica replica{owner};
+  const InstanceId high{40, owner};
+  const auto result = accept(replica, {}, {first}, command, high);
+  ASSERT_EQ(result.status, DispatchStatus::processed);
+  ASSERT_EQ(result.effects.size(), 1U);
+  EXPECT_EQ(std::get<SendMessage>(result.effects[0]).envelope,
+      (Envelope{owner, owner, AcceptOk{{}, high}}));
+  const auto& state = replica.instances().at(high).state;
+  EXPECT_EQ(state.phase, Phase::accepted);
+  EXPECT_EQ(state.command, kv::Payload{command});
+  EXPECT_EQ(state.dependencies, Dependencies{first});
+  EXPECT_FALSE(state.initial_command);
+  EXPECT_TRUE(state.initial_dependencies.empty());
+  const auto submitted = replica.dispatch(SubmitCommand{command});
+  EXPECT_EQ(std::get<SubmissionRegistered>(submitted.effects[0]).instance, (InstanceId{41, owner}));
+}
+TEST(AcceptTransition, InstallsSelectedUnionEvenWhenPreacceptedDependenciesShrink) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{{ReplicaId{1}, owner, PreAccept{first, command, {}}}});
+  replica.dispatch(PeerMessage{{owner, owner, PreAccept{id, command, {second}}}});
+  ASSERT_EQ(replica.instances().at(id).state.dependencies, (Dependencies{first, second}));
+  ASSERT_EQ(accept(replica, {}, {second}).status, DispatchStatus::processed);
+  const auto& state = replica.instances().at(id).state;
+  EXPECT_EQ(state.dependencies, Dependencies{second});
+  EXPECT_EQ(state.initial_dependencies, Dependencies{second});
+  EXPECT_EQ(state.initial_command, command);
+  EXPECT_EQ(state.phase, Phase::accepted);
+}
+TEST(AcceptTransition, ReplaysIdenticalAndRejectsEqualBallotContradictionsAtomically) {
+  Replica replica{owner};
+  const auto ballot = Ballot::recovery(1, ReplicaId{2});
+  ASSERT_EQ(accept(replica, ballot, {first}).status, DispatchStatus::processed);
+  const auto timer = replica.arm_timer(id, {7});
+  const auto replay = accept(replica, ballot, {first});
+  EXPECT_EQ(replay.status, DispatchStatus::replayed);
+  ASSERT_EQ(replay.effects.size(), 1U);
+  EXPECT_EQ(std::get<SendMessage>(replay.effects[0]).envelope,
+      (Envelope{owner, ReplicaId{2}, AcceptOk{ballot, id}}));
+  EXPECT_EQ(accept(replica, ballot, {second}), (DispatchResult{DispatchStatus::rejected, {}}));
+  EXPECT_EQ(accept(replica, ballot, {first}, kv::Nop{}),
+      (DispatchResult{DispatchStatus::rejected, {}}));
+  const auto& record = replica.instances().at(id);
+  EXPECT_EQ(record.state.dependencies, Dependencies{first});
+  EXPECT_EQ(record.state.ballots.accepted, ballot);
+  EXPECT_EQ(record.timer, std::get<ScheduleTimer>(timer.back()).guard);
+  EXPECT_EQ(accept(replica), (DispatchResult{DispatchStatus::stale, {}}));
+}
+TEST(AcceptTransition, UsesCurrentRatherThanAcceptedBallotAndExactCommittedGuard) {
+  Replica replica{owner};
+  replica.dispatch(PeerMessage{{owner, owner, Commit{{}, id, command, {first}}}});
+  EXPECT_EQ(accept(replica, {}, {first}), (DispatchResult{DispatchStatus::stale, {}}));
+  const auto ballot = Ballot::recovery(1, ReplicaId{2});
+  EXPECT_EQ(accept(replica, ballot, {second}), (DispatchResult{DispatchStatus::rejected, {}}));
+  ASSERT_EQ(accept(replica, ballot, {first}).status, DispatchStatus::processed);
+  EXPECT_EQ(replica.instances().at(id).state.phase, Phase::accepted);
+  EXPECT_EQ(replica.instances().at(id).committed_decision->dependencies, Dependencies{first});
+  EXPECT_EQ(replica.instances().at(id).committed_decision->command, kv::Payload{command});
+  EXPECT_EQ(replica.dispatch(PeerMessage{{ReplicaId{2}, owner,
+      Commit{ballot, id, kv::Nop{}, {first}}}}), (DispatchResult{DispatchStatus::rejected, {}}));
+  EXPECT_EQ(replica.dispatch(PeerMessage{{ReplicaId{2}, owner,
+      Commit{ballot, id, command, {second}}}}), (DispatchResult{DispatchStatus::rejected, {}}));
+  EXPECT_EQ(accept(replica, {}, {first}), (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_EQ(accept(replica, Ballot::recovery(2, owner), {}, kv::Nop{}),
+      (DispatchResult{DispatchStatus::rejected, {}}));
+  // A delayed old commit cannot cross the newly joined current ballot.
+  EXPECT_EQ(replica.dispatch(PeerMessage{{owner, owner, Commit{{}, id, command, {first}}}}).status,
+      DispatchStatus::stale);
+  EXPECT_EQ(replica.dispatch(PeerMessage{{ReplicaId{2}, owner,
+      Commit{ballot, id, command, {first}}}}).status, DispatchStatus::processed);
+}
+TEST(AcceptTransition, CurrentBallotGuardIsIndependentOfAcceptedBallot) {
+  Replica replica{owner};
+  ASSERT_EQ(accept(replica, {}, {first}).status, DispatchStatus::processed);
+  // Fixture of a joined ballot, not a recovery implementation or transition.
+  auto& state = const_cast<InstanceState&>(replica.instances().at(id).state);
+  const auto joined = Ballot::recovery(2, owner);
+  state.ballots.current = joined;
+  ASSERT_EQ(state.ballots.accepted, Ballot{});
+  EXPECT_EQ(accept(replica, Ballot::recovery(1, owner), {first}),
+      (DispatchResult{DispatchStatus::stale, {}}));
+  EXPECT_EQ(state.ballots.accepted, Ballot{});
+  EXPECT_EQ(accept(replica, joined, {second}).status, DispatchStatus::processed);
+  EXPECT_EQ(state.ballots.current, joined);
+  EXPECT_EQ(state.ballots.accepted, joined);
+  EXPECT_EQ(state.dependencies, Dependencies{second});
+}
+TEST(AcceptTransition, SupersedesTimersAndCollectorButKeepsMatchingFrozenProposal) {
+  Replica replica{owner};
+  start(replica);
+  reply(replica, ReplicaId{1});
+  const auto grace = reply(replica, ReplicaId{2});
+  const auto guard = std::get<ScheduleTimer>(grace.effects.back()).guard;
+  const auto timer = replica.arm_timer(id, {7});
+  const auto result = accept(replica, {}, {first});
+  ASSERT_EQ(result.status, DispatchStatus::processed);
+  ASSERT_EQ(result.effects.size(), 3U);
+  EXPECT_EQ(std::get<CancelTimer>(result.effects[0]).token,
+      std::get<ScheduleTimer>(timer.back()).guard.token);
+  EXPECT_EQ(std::get<CancelTimer>(result.effects[1]).token, guard.token);
+  EXPECT_EQ(std::get<SendMessage>(result.effects[2]).envelope,
+      (Envelope{owner, owner, AcceptOk{{}, id}}));
+  EXPECT_FALSE(replica.instances().at(id).initial_grace);
+  EXPECT_FALSE(replica.instances().at(id).timer);
+  EXPECT_EQ(replica.dispatch(TimerFired{guard}).status, DispatchStatus::stale);
+  EXPECT_EQ(replica.dispatch(TimerFired{std::get<ScheduleTimer>(timer.back()).guard}).status,
+      DispatchStatus::stale);
+  EXPECT_EQ(reply(replica, ReplicaId{3}).status, DispatchStatus::stale);
+  Replica selected{owner};
+  const auto ready = select_slow(selected);
+  selected.dispatch(Event{ready});
+  const auto frozen = selected.instances().at(id).slow_proposal;
+  EXPECT_EQ(accept(selected, {}, {}), (DispatchResult{DispatchStatus::rejected, {}}));
+  ASSERT_EQ(accept(selected, {}, {first, second, third}).status, DispatchStatus::processed);
+  EXPECT_EQ(selected.instances().at(id).slow_proposal, frozen);
+  EXPECT_EQ(accept(selected, Ballot::recovery(1, owner), {}, kv::Nop{}).status, DispatchStatus::processed);
+  EXPECT_EQ(selected.instances().at(id).state.command, kv::Payload{kv::Nop{}});
+  EXPECT_EQ(selected.instances().at(id).state.initial_command, command);
+  EXPECT_TRUE(selected.instances().at(id).state.initial_dependencies.empty());
+  EXPECT_FALSE(selected.instances().at(id).slow_proposal);
+}
 }  // namespace
 }  // namespace egalis::protocol

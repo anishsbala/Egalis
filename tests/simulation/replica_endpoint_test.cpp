@@ -41,7 +41,7 @@ void scenario(Network& network) {
   network.crash(ReplicaId{2});
   network.restart(ReplicaId{2});
   endpoints[2]->arm_timer(InstanceId{1, ReplicaId{2}}, {1});
-  network.scheduler().run(100);
+  network.scheduler().run(1000);
   EXPECT_EQ(network.scheduler().pending(), 0U);
   for (unsigned i = 0; i < endpoints.size(); ++i) {
     const auto& table = endpoints[i]->core().instances();
@@ -49,7 +49,15 @@ void scenario(Network& network) {
     EXPECT_GE(table.size(), 1U);
     EXPECT_LE(table.size(), 5U);
     for (const auto& [known, record] : table) {
-      EXPECT_EQ(record.state.phase, protocol::Phase::preaccepted);
+      EXPECT_TRUE(record.state.phase == protocol::Phase::preaccepted ||
+                  record.state.phase == protocol::Phase::accepted);
+      EXPECT_EQ(record.state.command, kv::Payload{submission().command});
+      if (record.state.initial_command)
+        EXPECT_EQ(record.state.command, kv::Payload{*record.state.initial_command});
+      else
+        EXPECT_EQ(record.state.phase, protocol::Phase::accepted);  // Accept preceded PreAccept.
+      EXPECT_TRUE(record.state.ballots.current.initial());
+      EXPECT_TRUE(record.state.ballots.accepted.initial());
       EXPECT_FALSE(record.state.dependencies.contains(known));
     }
   }

@@ -22,8 +22,15 @@ struct SlowProposal {
   Dependencies dependencies;
   bool operator==(const SlowProposal&) const = default;
 };
+struct CommittedDecision {
+  kv::Payload command;
+  Dependencies dependencies;
+  bool operator==(const CommittedDecision&) const = default;
+};
 struct InstanceRecord {
   InstanceState state;
+  // Retained decision evidence, independent of the current accepted candidate.
+  std::optional<CommittedDecision> committed_decision;
   std::optional<TimerGuard> timer;
   // Purpose-bound separately from manually armed mechanism timers.
   std::optional<TimerGuard> initial_grace;
@@ -71,6 +78,7 @@ class Replica {
   DispatchResult receive_preaccept_ok(ReplicaId source, const PreAcceptOk& message);
   DispatchResult select_initial(InstanceId instance, PreAcceptObservations observations,
                                 bool grace_expired = false);
+  DispatchResult receive_accept(ReplicaId source, const Accept& message);
   DispatchResult receive_commit(const Commit& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);

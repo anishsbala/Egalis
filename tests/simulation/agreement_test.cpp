@@ -88,7 +88,7 @@ TEST(AgreementSimulation, RetainedGraceResumesThroughRunnerEffectsAndReplays) {
     const auto& record = endpoint.core().instances().at(instance);
     EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
     EXPECT_FALSE(record.initial_grace);
-    EXPECT_EQ(record.state.phase, Phase::preaccepted);
+    EXPECT_EQ(record.state.phase, Phase::accepted);  // Real self-Accept follows slow selection.
     ASSERT_TRUE(record.preaccept_observations);
     EXPECT_EQ(record.preaccept_observations->size(), 3U);
     std::size_t handoffs = 0;
@@ -255,7 +255,9 @@ void mismatch_scenario(Network& network, bool fourth) {
   EXPECT_EQ(record.preaccept_observations->size(), fourth ? 4U : 3U);
   EXPECT_EQ(record.preaccept_observations->at(ReplicaId{expanded_peer}), (Dependencies{conflict}));
   EXPECT_TRUE(record.state.initial_dependencies.empty());
-  EXPECT_TRUE(record.state.dependencies.empty());  // Local cached vote is untouched.
+  EXPECT_TRUE(record.preaccept_observations->at(owner).empty());  // Frozen local vote is untouched.
+  EXPECT_EQ(record.state.dependencies, Dependencies{conflict});  // Real self-Accept installs the union.
+  EXPECT_EQ(record.state.phase, Phase::accepted);
   EXPECT_TRUE(record.initial_selection != InitialSelection::collecting);
   EXPECT_FALSE(record.initial_grace);
   EXPECT_EQ(handoffs(network), 1U);
