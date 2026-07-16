@@ -307,5 +307,28 @@ TEST(SlowQuorum, ForgedCandidateCannotReuseValueFreeAcknowledgments) {
   EXPECT_TRUE(acknowledge(replica, ReplicaId{1}).effects.empty());
   EXPECT_EQ(acknowledge(replica, ReplicaId{2}).effects.size(), Configuration::replicas);
 }
+
+TEST(SlowQuorum, RawCoreThreeRemoteRepliesDoNotRequireInitialQuorumOrSyntheticSelf) {
+  Replica replica{owner};
+  const auto held_self = open_slow(replica);
+  // Raw-core envelope fixture only: a real runner cannot delay immediate self
+  // delivery. This protects unrestricted AcceptOK quorum membership, not a
+  // realizable runner crash cut or transport schedule.
+  const auto& record = replica.instances().at(id);
+  ASSERT_TRUE(record.preaccept_observations);
+  EXPECT_FALSE(record.preaccept_observations->contains(ReplicaId{3}));
+  EXPECT_FALSE(record.preaccept_observations->contains(ReplicaId{4}));
+  EXPECT_TRUE(acknowledge(replica, ReplicaId{3}).effects.empty());
+  EXPECT_TRUE(acknowledge(replica, ReplicaId{4}).effects.empty());
+  const auto selected = acknowledge(replica, ReplicaId{1});
+  ASSERT_EQ(selected.effects.size(), Configuration::replicas);
+  EXPECT_FALSE(record.slow_votes->responders.contains(owner));
+  EXPECT_EQ(record.slow_votes->responders.size(), 3U);
+  EXPECT_EQ(replica.dispatch(PeerMessage{held_self}), (DispatchResult{DispatchStatus::stale, {}}));
+  const auto& self_commit = std::get<SendMessage>(selected.effects[0]).envelope;
+  EXPECT_EQ(self_commit, (Envelope{owner, owner, Commit{{}, id, command, {first, second, third}}}));
+  replica.dispatch(PeerMessage{self_commit});
+  EXPECT_EQ(record.state.phase, Phase::committed);
+}
 }  // namespace
 }  // namespace egalis::protocol

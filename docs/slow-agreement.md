@@ -80,3 +80,38 @@ records the decision. Fourth/fifth, delayed or duplicate replies cannot alter or
 rebroadcast it, including before the self-Commit effect is delivered. Retained
 initial metadata and decision evidence remain distinct from the collector.
 This slice initiates no positive-ballot recovery or durable restart behavior.
+
+
+## Failure and replay evidence (C022)
+
+Six additional deterministic simulation cases reconstruct each captured trace
+through serialize/parse and replay, checking every observed target decision
+and retained decision value after each scheduled input. They cover:
+
+- Five-node disagreement from real PreAccept expansion of a seeded conflict,
+  with coordinator3 and exact self-first Accept/Commit order3,0,1,2,4. The
+  frozen initial quorum is3,0,1; the successful AcceptOK quorum is3,2,4.
+- Two survivors with duplicated packets remain below initial quorum and do not
+  select or decide. The existing three-survivor case commits at all survivors.
+- Duplicate Accept/AcceptOK retries, including explicitly verified overtaking
+  delivery order, retain one frozen candidate and one Commit broadcast.
+  Acknowledgment retries begin only after the sender actually accepts.
+- Superseding ballot receipt clears collector ownership; old/larger replies and
+  stale Commit cannot decide that generation. Positive-ballot messages are typed
+  receiver-guard fixtures, not recovery initiation or progress evidence.
+- Commit before Accept materializes immutable decision evidence; delayed initial
+  Accept is stale, higher same-decision Accept is allowed, and only exact-current
+  Commit returns the instance to committed phase.
+- Coordinator loss before slow selection, at exactly two real AcceptOKs, and
+  immediately after self-Commit. These are serialized runner boundaries. The
+  first two cuts establish nondecision for that bounded run; after self-Commit,
+  already queued remote decisions survive sender loss. No callback interrupts
+  immediate self-delivery, and no progress after permanent coordinator loss is
+  promised.
+
+A separate raw-core fixture holds selfAck and accepts three remote senders,
+including voters outside the initial quorum. It protects unrestricted quorum
+membership; delayed self-delivery is not a legal runner schedule. All prior test
+names remain, including historical names whose phase expectations advanced in
+C020/C021. These bounded scenarios do not establish durable restart, recovery,
+execution, unconditional liveness, or a distributed-system safety proof.
