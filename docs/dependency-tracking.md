@@ -45,5 +45,7 @@ Cross-phase fixtures describe records only, not implemented recovery transitions
 They verify that querying does not alter command, initial metadata, dep, phase,
 ballots or timer guards. Integration tests query the same Replica through simulated
 endpoints under ties, duplicates, loss, partitions, crash/restart and replay. Peer
-consensus messages still return unsupported, so they cannot install candidate
-changes ahead of milestone 9 and later recovery/accept milestones.
+PreAccept messages now consume this oracle in milestone 9: the first receive
+unions the original proposal with current conflicts, then freezes its response.
+Exact duplicates do not rescan. Other consensus messages remain unsupported;
+recovery and Accept candidate changes are still deferred. See preaccept.md.

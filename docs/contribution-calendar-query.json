@@ -1,0 +1,7 @@
+{
+  "query": "query($from: DateTime!, $to: DateTime!) { viewer { login contributionsCollection(from: $from, to: $to) { contributionCalendar { totalContributions weeks { firstDay contributionDays { date contributionCount contributionLevel } } } } } }",
+  "variables": {
+    "from": "2026-07-01T00:00:00Z",
+    "to": "2026-10-14T23:59:59Z"
+  }
+}

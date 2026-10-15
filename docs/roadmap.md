@@ -1,9 +1,10 @@
 # Implementation roadmap
 
-Each row is an engineering milestone that may span multiple coherent commits,
-not a calendar commitment or claim of completion. Current implementation status, proposed dates, and the six
+Each row is an engineering milestone that may require several coherent commits,
+not a commit-count quota or a claim of completion. Current implementation status,
+the proposed 2026 commit slices/calendar, and the six
 development batches are maintained in [commit-plan.md](commit-plan.md). Milestones
-1 through 6 are implemented and verified at this boundary. Later work
+1–9 are implemented, verified and committed locally. Later work
 starts only when prerequisites are verified. Small adjustments or split commits
 are welcome when review reveals additional obligations; never manufacture changes
 to meet a commit quota.
@@ -12,7 +13,7 @@ Every implementation commit must configure, build, pass existing tests and its
 new behavioral tests, and update the design mapping when necessary. Partial
 components are tested in isolation and are not advertised as a usable cluster.
 
-| # | Proposed commit | Prerequisites | Functionality and acceptance evidence |
+| # | Milestone objective / suggested message | Prerequisites | Functionality and acceptance evidence |
 | --- | --- | --- | --- |
 | 1 | build: establish C++20 and GoogleTest harness | none | Design documents, compiler contract test, CTest discovery, GCC/Clang CI definition; actual local build required before commit. |
 | 2 | protocol: define baseline instance and ballot types | 1 | Checked ordering, ownership, sentinel separation, membership and quorum validation; boundary tests. |
@@ -59,8 +60,8 @@ Excluded for this first scope: membership changes, sharding, snapshots, protocol
 state pruning, Byzantine tolerance, transactions across keys, optimized EPaxos*,
 thrifty fast paths, and unaudited local reads. Each needs a separate design.
 
-Git identity is verified and the proposed calendar awaits approval in commit-plan.md.
-Commit only functioning, reviewed milestones after that agreement. Do not rewrite an
+Git identity and the reconstructed calendar are approved in commit-plan.md.
+Commit only functioning, reviewed implementation slices. Do not rewrite an
 existing repository or push without approval. The specification was published
 4 November 2025; historical metadata must not imply this EPaxos* design predates
 its reference or establish a false record of engineering dates.

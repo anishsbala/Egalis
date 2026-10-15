@@ -1,6 +1,11 @@
 # Egalis design proposal
 
-Status: batch 1 foundations and simulator implemented; consensus is not implemented. Decisions
+Status: milestones 1–9 foundations, simulator, shared dispatch, dependency queries
+and initial PreAccept implemented; quorum consensus is not implemented.
+See [replica-dispatch.md](replica-dispatch.md) for the
+actual input/effect contract, lifecycle and unsupported-handler boundaries.
+Read-only conflict scans and proposal expansion are documented in
+[dependency-tracking.md](dependency-tracking.md). Decisions
 below distinguish the selected algorithm from engineering extensions. Changes to
 the algorithm require an explicit design revision and new counterexample tests.
 
@@ -208,6 +213,11 @@ sections, alternatives, invariants affected, and validation evidence before codi
 
 Do not infer correctness or production readiness from passing tests. Benchmark
 claims require reproducible measured artifacts. Local Git initialization and
-the account-matching identity are authorized; commits wait for approval of the
-schedule in commit-plan.md, and pushing still requires explicit approval.
+the account-matching identity are authorized; implementation commits follow the
+approved schedule in commit-plan.md, and pushing still requires explicit approval.
 See adr/0001-simulator-boundaries.md for implemented simulator decisions and limits.
+
+Milestone 9 initial PreAccept is implemented in the shared Replica core, not the
+transport. Checked volatile ID allocation, frozen initial metadata, guarded
+dependency expansion and original-response replay are documented in preaccept.md.
+Agreement, durable ID reservations and supporting persisted votes remain deferred.

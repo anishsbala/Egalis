@@ -55,3 +55,9 @@ The message layer cannot establish quorum decisions, legal phase transitions,
 validation safety, or restart correctness. Milestones 7 onward implement and test
 those behaviors. Canonical message bytes are a versioned trace fingerprint, not
 a substitute network wire format; Protobuf remains milestone 28.
+
+Milestone 9 implements Figure 3's initial submission and guarded PreAccept receive
+only. Exact duplicate response replay is documented as a transport refinement in
+preaccept.md; it does not re-run the guarded transition. Duplicate caching is now
+resolved for ballot zero / PreAccepted. Vote collection, grace policy, candidate
+freeze for agreement, recovery and durable self-delivery remain later work.

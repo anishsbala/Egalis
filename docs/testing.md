@@ -6,7 +6,14 @@ Batch 1 includes GoogleTest coverage for checked IDs, ballots and quorum members
 GET/PUT/CAS semantics with 1,476 commuting state/pair checks; all baseline message
 alternatives; scheduling, transport faults, crashes, deterministic randomness,
 trace serialization and replay divergence. The build contract remains a toolchain
-smoke test. Agreement/recovery and durable protocol behavior are not implemented
+smoke test. Milestone 7 adds input/effect contracts, authoritative replica state,
+timer guards, volatile lifecycle isolation, bounded self-effect execution and
+core trace replay (including sixteen seeded five-replica scenarios).
+Milestone 8 adds full-scan and proposal-expansion tests over current payloads,
+all phases, retained initial metadata, Nop/bottom, deterministic ordering and
+eight additional seeded fault/replay scenarios. Cross-phase fixtures are not
+an implementation or verification of recovery transitions.
+Agreement/recovery and durable protocol behavior are not implemented
 or tested yet. See verification.md for actual commands and results.
 
 ## Behavioral testing layers
@@ -99,3 +106,11 @@ Before every code commit: inspect the diff, configure/build with CMake, run the
 relevant GoogleTest/CTest suites, preserve new counterexample fixtures, and update
 the verification record. A blocked build remains a blocked verification step.
 No claim of production readiness or formal correctness follows from passing tests.
+
+Milestone 9 coverage adds checked allocation and exhaustion, original versus
+expanded dependency metadata, receive guards, immutable duplicate responses,
+conflicting duplicates, simultaneous multi-coordinator conflicts, reordered
+delivery, retained-memory crash generations, seeded repeatability and replay.
+Each engineering slice is tested from its exact staged source export in both
+Debug and Release with -Werror. These tests do not establish agreement or durable
+restart safety; PreAcceptOK collection is deliberately not implemented yet.

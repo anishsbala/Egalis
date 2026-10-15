@@ -73,3 +73,15 @@ Once a dispatch or effect batch starts, unexpected failure is terminal for the
 runner and network, rather than retrying a partially executed transition. Invalid
 effect batches are rejected before starting. The single outstanding per-instance
 timer is a mechanism; later milestones define its actual grace/recovery policy.
+
+## Milestone 9 integration
+
+SubmitCommand allocates a checked local ID; the trusted preallocated-ID Submit
+uses the same coordinator path. Both freeze the initial proposal and emit
+PreAccept to self before remote sends. Receiving PreAccept now installs the
+initial vote and emits PreAcceptOK; exact retries replay the frozen reply without
+another transition. Other peer messages remain unsupported, including vote
+collection. Earlier descriptions of registration-only submission and unsupported
+PreAccept describe the milestone 7 boundary, not current behavior. Trace input
+encoding is still only framing, while emitted PreAccept messages are now real
+protocol effects. See preaccept.md for guards, rejection and lifecycle limits.
