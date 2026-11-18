@@ -14,6 +14,11 @@ See [the pause point](docs/PAUSE_POINT.md) for the exact revision, limitations a
 Windows rebuild/resume instructions. `main` preserves the 14 engineering commits;
 `checkpoint/milestone-9` adds current documentation without changing that history.
 
+Codex orchestration setup is documented in [engineering-workflow.md](docs/engineering-workflow.md).
+Start a new Codex session in the control checkout and request
+`Use $egalis-next-milestone to complete milestone 10 through a PR; do not merge.`
+This setup does not itself authorize starting milestone 10.
+
 - [Architecture, protocol selection, assumptions, and open decisions](docs/design.md)
 - [Dependency-ordered milestones](docs/roadmap.md)
 - [Testing strategy](docs/testing.md)

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "control_branch": "checkpoint/milestone-9",
+  "engineering_branch": "main",
+  "engineering_head": "32e0c855d96af7154872d9e27352d2c7d3219005",
+  "checkpoint_anchor": "675f0435fce834a9abec39b6a4476e5281b240ab",
+  "completed_milestones": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "completed_slice": "C014",
+  "next_milestone": 10,
+  "next_slices": ["C015", "C016", "C017", "C018"],
+  "status": "paused; workflow setup only; await request to implement milestone 10",
+  "repair_cycle_limit": 3,
+  "setup_task": "docs/tasks/orchestration-setup.md",
+  "merge_policy": "No automatic merges. Control ancestry stays off main. Historical feature integration requires user-reviewed merge policy."
+}
