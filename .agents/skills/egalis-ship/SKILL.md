@@ -6,8 +6,10 @@ description: Prepare coherent Egalis feature commits and a reviewed GitHub PR, m
 Read AGENTS.md and docs/engineering-workflow.md. Confirm task authorization,
 expected base, clean/unrelated changes, remote identity and gh auth status.
 Reuse the task's branch/worktree and PR when present. Setup/control PRs target
-checkpoint/milestone-9; protocol feature PRs target main and must not inherit
-October/November control commits. Do not create duplicate PRs.
+checkpoint/milestone-9; the first protocol feature PR targets main, and authorized
+successors may target the exact verified predecessor branch as stacked PRs.
+Record and recheck head/base SHAs; no protocol branch may inherit October/November
+control commits. Do not create duplicate PRs.
 
 Before each commit require independent review and egalis-verify of the exact
 staged tree. Inspect git diff --cached, artifacts/secrets and write-tree; stage
@@ -26,4 +28,7 @@ routine repairs need no new user prompt. On green checks and resolved findings,
 report ready for user review; never merge. Pending/blocked checks remain explicit
 and the PR stays draft until verification/review is complete. Persist PR URL,
 commit IDs and remaining blockers in task state. Network/sandbox denial calls for
-narrow permission escalation, never bypass or token exposure.
+narrow permission escalation, never bypass or token exposure. In an authorized
+sequential range, return the verified tip and PR dependencies to the orchestrator
+so it can advance without a new user prompt. Never alter historical metadata to
+fit an unplanned published-source repair; escalate that timeline decision.

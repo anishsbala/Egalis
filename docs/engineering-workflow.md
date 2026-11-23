@@ -7,8 +7,9 @@ This setup PR targets it, not main. It contains current planning, project agents
 skills and actual-date task records. Keep `main` at C014 until a user-reviewed
 engineering PR is integrated. Both published anchors remain immutable.
 
-Future protocol work starts from `main` in an isolated worktree and a
-`feature/m10-fast-agreement`-style branch. The root agent stays in the control
+The first protocol milestone starts from `main` in an isolated worktree and a
+`feature/m10-fast-agreement`-style branch. Authorized subsequent milestones can
+start from verified unmerged predecessor tips with stacked PRs. The root stays in the control
 checkout, reads its AGENTS.md/skills/plan, and passes their absolute paths and
 acceptance criteria to workers. Historical engineering worktrees deliberately
 do not inherit the October/November control commits or configuration. Run the
@@ -49,6 +50,20 @@ bounded loop in AGENTS.md. It does not need another user prompt per slice, commi
 test, branch, handoff or routine repair. This is an on-demand orchestrated session,
 not a scheduled service that runs while the computer is asleep. No scheduler,
 extra API key, third-party automation framework or global model change is needed.
+
+On 23 November 2026 the user authorized automatic sequential advancement from
+milestone10 through roadmap completion. That active range in workflow-state.json
+overrides the one-milestone default above. Each transition still requires all
+verification/review/CI gates. Subsequent milestones may use stacked PRs based on
+their verified unmerged predecessors; no merge or human approval is implied. See
+docs/tasks/sequential-development.md for the active ledger and stopping rules.
+
+Keep integrated-main completion separate from verified-unmerged readiness. Record
+exact PR head/base SHA, gate evidence, findings and acceptance-criteria outcomes
+for each unmerged milestone. Re-fetch/compare refs on resume and before advancing.
+If upstream changes, invalidate affected evidence and reconcile/reverify first.
+Never resolve a published divergent stack with an unapproved merge/rewrite or
+silently invent reconstructed timestamps for post-publication repairs.
 
 The active project must be trusted to load project configuration. Managed policy
 and current sandbox/approval settings remain authoritative; do not disable them

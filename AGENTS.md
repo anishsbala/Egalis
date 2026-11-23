@@ -18,9 +18,15 @@ Duplicate replies are not distinct votes. Volatile resume is not durable restart
 
 ## Autonomous task loop
 
-For a requested engineering milestone use `$egalis-next-milestone`. Select only
-the first dependency-ready, unverified milestone; complete its justified slices
-then stop at that milestone's PR. Never start the next milestone automatically.
+Use `$egalis-next-milestone` for the next dependency-ready, unverified milestone.
+The default scope is one milestone. When workflow-state.json records an explicit
+user-authorized sequential range, complete its milestones in numerical dependency
+order without requesting another prompt at each transition. Within that range,
+advance only after acceptance, exact-tree Debug/Release verification, independent
+review, resolved findings, green CI and persisted evidence. A verified milestone
+is not a human-approved or merged milestone. Stop when the authorized range is
+finished, the user pauses, a consequential decision needs approval, or bounded
+repairs cannot resolve a failure. New user scope restrictions always take priority.
 Delegate meaningful specification work to `egalis_spec`, implementation to
 `egalis_implement`, independent review to `egalis_review`, and verification to
 `egalis_verify`. Root owns scope, integration and Git. Parallelize independent
@@ -52,7 +58,12 @@ author. Verification agent investigates failures separately from the implementer
 
 Read `docs/engineering-workflow.md` for the control/engineering split. Preserve
 C001–C014 and checkpoint 675f043 exactly. Never work on main directly. Use an
-isolated `feature/mNN-description` branch from current main for protocol work;
+isolated `feature/mNN-description` branch from current main for the first protocol
+milestone; subsequent authorized milestones may branch from their verified,
+unmerged predecessor and open stacked PRs against that predecessor branch.
+Persist exact base/tip hashes and PR dependencies; never count an unverified
+predecessor as completed. If an upstream branch changes, reconcile and reverify
+dependent work before advancing; do not rewrite published downstream commits.
 setup/control branches start from checkpoint. Do not mix control ancestry into
 historical engineering PRs. Root may create relevant commits, push only its
 feature/setup branch, open/update a PR, monitor checks and fix scoped failures.
