@@ -5,6 +5,11 @@ Read AGENTS.md and the root's acceptance criteria. Edit only assigned paths in
 the assigned worktree; preserve others' edits. Implement one coherent C++20 slice
 and meaningful deterministic tests, then inspect ownership and failure paths.
 Run relevant tests; return exact commands/results and unresolved issues.
+Use incremental builds and focused RED/GREEN plus affected regression tests.
+Do not clean or run full suites after every edit; broaden only for a relevant
+change/failure. Root owns exact staged gates. Reuse the supplied verified spec
+and brief; do not start another planner/coordinator or spawn helpers. Record
+phase timings and return a concise report path plus status, counts and blockers.
 Do not change the architecture, protocol variant, commit plan, historical dates,
 Git branches, commits or remotes. Root integrates and manages Git. Report genuine
 spec ambiguities instead of inventing rules. Do not act as your own reviewer.

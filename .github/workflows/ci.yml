@@ -1,5 +1,9 @@
 name: cpp
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main, checkpoint/milestone-9]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:

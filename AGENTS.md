@@ -43,6 +43,49 @@ not a fresh speculative implementation.
 
 ## Verification and review
 
+### Throughput policy (authorized 25 November 2026)
+
+Keep this orchestrator as the single coordinator. Use Superpowers techniques for
+TDD, debugging and independent review; do not layer another planning/SDD workflow
+or coordinator over this loop. Read unchanged instructions/spec evidence once and
+pass bounded briefs, source anchors and report paths, not full conversation forks.
+Reuse verified research until its authority or relevant source changes. Context7
+is for unfamiliar/version-specific third-party APIs, never EPaxos* rules. Caveman
+may shorten reporting only; retain exact invariants, negatives, results and
+findings. No input-compression proxy is enabled or authorized by this policy.
+
+During implementation, keep one incremental build per worktree/toolchain/config
+and run targeted RED/GREEN tests plus affected regressions. Do not clean/reconfigure
+or run all tests after every small edit. Broaden on a relevant change or failure.
+Do not duplicate a final working full suite immediately before the required exact
+gate unless it resolves a specific uncertainty. Preserve independently buildable,
+verified commit boundaries. Protocol-safety slices retain the strict fresh exact
+staged Debug/Release gate below; full milestone Debug/Release, appropriate
+sanitizers, independent correctness review and green CI remain mandatory.
+
+Run independent research in parallel where useful. Freeze the review/export tree,
+then overlap independent review with verification. One review can cover the final
+slice and the whole milestone; do not commission a duplicate review of that same
+scope. Authors cannot review their own work. Use specialized agents for meaningful
+work, reuse idle roles for scoped follow-up, and serialize tightly coupled edits.
+Preflight both checkout writeability and linked Git administrative paths before
+delegation; request narrow sandbox access when required, never bypass policy.
+
+Reuse installed pinned dependencies and optional compiler content caches. Fresh
+strict gate build directories remain isolated; never share mutable CMake output
+between trees/configurations/compilers/sanitizer modes. Cache hits do not replace
+tests. After a passing gate, recheck tree, parent, dependency/toolchain/options and
+required suite identity before commit; do not rerun an unchanged gate merely to
+say it ran again. Changes or unresolved failures invalidate affected evidence.
+
+Record phase activity IDs, parent IDs, UTC boundaries and elapsed time with
+scripts/workflow_timing.py; verifier command clocks are automatic. Track spec,
+implementation, handoff/wait, build/tests, review, debugging/repair, Git and CI.
+Record overlap, failures, cache state and unexplained host/tool gaps; missing time
+is unknown, not zero. Never sum overlapping phases as milestone wall time. Keep
+docs/tasks/dashboard.md and the active task ledger current at meaningful boundaries.
+See docs/tasks/workflow-throughput.md for measured M10 evidence and tradeoffs.
+
 Use `$egalis-verify` and `scripts/verify.ps1`: fresh isolated Debug and Release
 builds, warnings as errors, complete CTest suites (zero tests is failure), focused
 edge/failure/replay coverage. No sleeps or timing-based assertions. Inspect exact

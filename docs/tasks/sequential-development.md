@@ -133,3 +133,22 @@ Debug159/159 and Release159/159. Acceptance complete; repair cycles0/3 (one
 preserved environment-timeout gate rerun, no product repair). Human approval and
 integration remain pending. M11 may branch from exact verified tip, stacked on
 feature/m10-fast-agreement. Approved decomposition docs/tasks/milestone-11-plan.md.
+
+## C019 completion and workflow optimization — 2026-11-26
+
+C019 committed764854c01c6aea087045e53bbf07f30e20961494, parentae50e873,
+tree5c68ffde45c27c337852cfb9452ecae7865e43fa, approved author=committer
+2026-07-13T13:30:00-04:00. Independent review/root/c019_review PASS no findings.
+Exact frozen controlc06539c gate Debug166/166 Release166/166 Werror, no skips,
+all159 prior retained; UTC01:55:09–01:58:09 elapsed180.087s. Independent audit
+/root/audit_c019_gate confirmed current index/export blob identity and safe reuse
+without duplicate runs. Evidence build/m11-audit/C019-verification/
+evidence-20261126T015508993Z-5f37aeba/verification.json. C019 not yet pushed.
+C020 implementation active/root/c020_implement with focused incremental tests;
+M11 incomplete. Optional nonzero coordinator coverage carried to C022.
+
+Workflow changes isolated on codex/workflow-throughput from controlc06539c.
+Measured M10 evidence in m10-session-timing.md/m10-gate-timing.md; no fabricated
+speedup claims. Tooling25/25 tests passes; independent process review/gates pending.
+Automatic review rejected remote GitHub compiler-cache uploads; omitted, local
+compiler-cache support only. No cache proxy, history rewrite or merge.

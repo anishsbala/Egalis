@@ -14,6 +14,8 @@ not automatic merging or a standing daemon.
 2. Delegate paper/architecture analysis to egalis_spec. Record acceptance criteria,
    invariants, commit slices and any consequential decision in the task record.
    Resolve ambiguities before implementing affected behavior.
+   Reuse verified findings until relevant authority/source changes. Keep one
+   coordinator/approved plan; use Superpowers techniques, not a second workflow.
 3. For the first milestone create/reuse an isolated feature worktree from main.
    Later milestones may start from an exact verified unmerged predecessor tip,
    with a stacked PR targeting that predecessor branch. Re-fetch and compare
@@ -23,6 +25,11 @@ not automatic merging or a standing daemon.
 4. Assign slices in dependency order to egalis_implement. Require focused tests
    and independently buildable boundaries, not quota-driven commits. Use
    egalis-verify and an independent egalis_review pass before each slice commit.
+   Supply bounded briefs/report paths and explicit ownership, not conversation
+   forks. Reuse incremental builds; focused RED/GREEN and affected regressions
+   precede exact full safety gates. Broaden working tests for concrete uncertainty.
+   Freeze the snapshot and overlap review/verification. One final-slice review
+   may cover the whole milestone; do not commission the same review twice.
 5. Root stages only relevant files, validates the staged export, commits with
    approved metadata and verifies parent/tree/date. Keep actual-date evidence in
    the control task record, not historical engineering commits. Repeat across
@@ -43,3 +50,12 @@ findings, cycles used and PR URL in docs/tasks/<task>.md on the control branch
 and/or the PR. Maximum three repair/re-review cycles total; on exhaustion mark
 blocked with exact evidence and request user direction. User approval is needed
 for new architecture/timeline policy, not ordinary engineering choices.
+
+Preflight checkout and linked Git administrative permissions before delegation.
+Use native PowerShell/Python on Windows; no Bash helper layer is required.
+Reuse pinned dependencies/optional compiler cache, never mutable strict-gate
+CMake trees. Do not repeat unchanged passing gates. Record phase/source/parent
+IDs with scripts/workflow_timing.py and update docs/tasks/dashboard.md at meaningful
+boundaries. Overlapping elapsed spans are not additive active time. Concise reports
+retain exact guards/counts/failures/findings. Context7 is conditional third-party
+documentation; the pinned paper alone governs protocol rules.

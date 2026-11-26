@@ -7,4 +7,8 @@ exclude Section 4 optimizations and original EPaxos recovery. Return exact
 figures/guards, invariants, dependencies, ambiguities, acceptance tests and source
 references. Distinguish paper requirements from engineering refinements. Do not
 implement or decide consequential ambiguities. Hand evidence back to the root.
+Reuse prior pinned findings when their authority and relevant source are unchanged;
+report only new obligations or invalidated assumptions. Context7 may clarify
+third-party APIs, never replace paper authority. Do not launch another workflow.
+Record research timing and preserve exact guards/source references in the report.
 """

@@ -1,5 +1,44 @@
 # Autonomous engineering workflow
 
+## Throughput policy — authorized 25 November 2026
+
+Use AGENTS.md's throughput policy: one orchestrator, one acceptance record and one
+active plan. Superpowers supplies TDD/debugging/review techniques without another
+planning/SDD process. Context7 is conditional third-party API documentation, never
+protocol authority. Caveman may shorten reports but cannot discard invariants,
+negatives, results or findings. No input-compression proxy is enabled.
+
+Keep incremental implementation builds stable within source/toolchain/config;
+focused RED/GREEN plus affected regressions are the default edit loop. Clean for
+an identified cache/toolchain issue or the mandatory isolated exact gate. Every
+protocol-safety slice retains full exact staged Debug/Release Werror and
+independent review. Broaden working tests for concrete uncertainty; do not
+automatically repeat the same full passing gate. Review and verification overlap
+on a frozen snapshot. One final review can cover both slice and milestone.
+Reuse pinned spec findings and bounded briefs instead of whole transcript forks.
+
+Reuse installed pinned GoogleTest with -GTestPrefix. Optional -CompilerLauncher
+supports a locally installed compiler content cache; each strict gate still
+starts in a fresh CMake directory and executes all tests. No unsafe sloppiness,
+shared mutable CMake output, or executable-as-proof reuse. Launcher path/content
+digest is recorded; version and cache hits may be unknown. Cache misses build
+normally. No cache speedup is yet measured.
+Remote compiler-cache uploads are not enabled: automatic approval review rejected
+that proposed external payload. Local compiler caching needs no remote upload.
+
+Control CI runs all PRs, protected-branch pushes and manual dispatch; feature
+pushes need a PR for remote gates, avoiding duplicate push+PR matrices. All
+compiler/configuration/sanitizer/required jobs remain. This changes control CI
+only; historical engineering branches retain their own CI until separately
+reviewed integration. Never import control ancestry to obtain the new workflow.
+
+Record phase/source/parent IDs with scripts/workflow_timing.py. The verifier records
+command clocks automatically. Preserve failures, interruptions and unexplained
+gaps; elapsed time is not CPU work. Do not sum overlapping phases as milestone
+wall time. Keep docs/tasks/dashboard.md and the task ledger current at meaningful
+boundaries. See docs/tasks/workflow-throughput.md and the two M10 timing reports
+for measured results, missing telemetry and expected tradeoffs.
+
 ## Control plane versus engineering history
 
 Use `checkpoint/milestone-9` as the persistent orchestration/control branch.

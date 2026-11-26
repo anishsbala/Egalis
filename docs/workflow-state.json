@@ -29,9 +29,9 @@
     "through": 36,
     "authorized_on": "2026-11-23"
   },
-  "status": "active: M10 verified-unmerged PR2 green; M11 C019 dependency-ready",
-  "active_slice": "C019",
-  "active_engineering_tip": "ae50e873313af131f7648a295bfe64569fa6c137",
+  "status": "active: M10 verified-unmerged PR2; C019 committed/reviewed/exact166 each; C020 implementing",
+  "active_slice": "C020",
+  "active_engineering_tip": "764854c01c6aea087045e53bbf07f30e20961494",
   "active_engineering_branch": "feature/m11-slow-agreement",
   "active_engineering_worktree": "C:/Coding Projects/Egalis-m10",
   "active_task": "docs/tasks/sequential-development.md",

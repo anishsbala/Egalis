@@ -16,6 +16,10 @@ staged tree. Inspect git diff --cached, artifacts/secrets and write-tree; stage
 explicit paths. Root commits coherent changes, approved historical metadata only
 for scheduled slices, actual timestamps for setup/control changes. Verify hash,
 parent, identity, timestamps and tree afterward; never amend published commits.
+Do not repeat an unchanged passing exact-tree gate just before commit. Recheck
+tree/parent/toolchain/options/dependencies and required suite instead; changes or
+unresolved failures require new affected proof. Final PR completion still requires
+full Debug/Release, appropriate sanitizer CI and independent correctness review.
 
 Push only the exact intended branch: git push -u origin HEAD:refs/heads/<branch>.
 No --force, --all, tags or main push. Create/update a PR with explicit base/head,
@@ -32,3 +36,7 @@ narrow permission escalation, never bypass or token exposure. In an authorized
 sequential range, return the verified tip and PR dependencies to the orchestrator
 so it can advance without a new user prompt. Never alter historical metadata to
 fit an unplanned published-source repair; escalate that timeline decision.
+Record Git/CI phase timing and update dashboard/task evidence at milestone
+boundaries. Parallel CI jobs overlap; do not sum them as milestone elapsed time.
+Use a known-capable authorized publication route rather than repeatedly retrying
+a connector that already reported insufficient permission.
