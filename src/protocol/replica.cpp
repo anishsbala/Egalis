@@ -49,6 +49,10 @@ DispatchResult Replica::handle(const PeerMessage& input) {
     return receive_preaccept(input.envelope.source, *message);
   if (const auto* message = std::get_if<PreAcceptOk>(&input.envelope.message))
     return receive_preaccept_ok(input.envelope.source, *message);
+  if (const auto* message = std::get_if<Accept>(&input.envelope.message))
+    return receive_accept(input.envelope.source, *message);
+  if (const auto* message = std::get_if<AcceptOk>(&input.envelope.message))
+    return receive_accept_ok(input.envelope.source, *message);
   if (const auto* message = std::get_if<Commit>(&input.envelope.message))
     return receive_commit(*message);
   return {DispatchStatus::unsupported, {}};
@@ -57,7 +61,7 @@ DispatchResult Replica::handle(const TimerFired& input) {
   const auto found = instances_.find(input.guard.instance);
   if (found != instances_.end() && found->second.initial_grace == input.guard) {
     const auto& record = found->second;
-    if (record.initial_quorum_selected || !record.preaccept_observations ||
+    if (record.initial_selection != InitialSelection::collecting || !record.preaccept_observations ||
         !initial_observation_allowed(record.state) ||
         record.state.ballots.current != input.guard.ballot ||
         record.preaccept_observations->size() < Configuration::slow_quorum)
@@ -118,7 +122,7 @@ Effects Replica::resume() {
   Effects effects;
   auto next = next_timer_;
   for (const auto& [id, record] : instances_) {
-    if (!record.initial_quorum_selected && record.preaccept_observations &&
+    if (record.initial_selection == InitialSelection::collecting && record.preaccept_observations &&
         initial_observation_allowed(record.state) &&
         record.preaccept_observations->size() >= Configuration::slow_quorum &&
         observations_match_initial_dependencies(*record.preaccept_observations, record.state)) {

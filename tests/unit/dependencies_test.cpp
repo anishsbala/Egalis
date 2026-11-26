@@ -206,7 +206,6 @@ TEST(Dependencies, UnsupportedCandidateChangesCannotAlterTheLiveOracle) {
   const Dependencies proposed{id(7, 4)};
   const auto before = replica.expand_dependencies(target, get(), proposed);
   const std::pair<Message, DispatchStatus> candidates[]{
-      {Accept{ballot, id(1), kv::Nop{}, {}}, DispatchStatus::unsupported},
       {Commit{ballot, id(1), kv::Nop{}, {}}, DispatchStatus::stale},
       {Validate{ballot, id(1), put("other"), {}}, DispatchStatus::unsupported}};
   for (const auto& [message, expected] : candidates) {

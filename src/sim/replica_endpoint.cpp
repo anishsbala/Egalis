@@ -12,6 +12,14 @@ std::string guard_text(const TimerGuard& guard) {
   return std::to_string(guard.instance.number()) + "/" +
          std::to_string(guard.ballot.number()) + "/" + std::to_string(guard.token.value);
 }
+std::string slow_text(const SlowPathReady& ready) {
+  std::string text = "slow-ready/" + std::to_string(ready.instance.number()) + "/" +
+      std::to_string(ready.ballot.number());
+  for (const auto& [sender, dependencies] : ready.observations)
+    text += "/" + canonical(Envelope{sender, ready.instance.coordinator(),
+                                    PreAcceptOk{ready.instance, dependencies}});
+  return text;
+}
 std::string fingerprint(const Event& event, ReplicaId replica) {
   return std::visit([replica](const auto& input) -> std::string {
     using T = std::decay_t<decltype(input)>;
@@ -28,6 +36,8 @@ std::string fingerprint(const Event& event, ReplicaId replica) {
       return "peer/" + canonical(input.envelope);
     } else if constexpr (std::is_same_v<T, TimerFired>) {
       return "timer/" + guard_text(input.guard);
+    } else if constexpr (std::is_same_v<T, SlowPathReady>) {
+      return slow_text(input);
     } else {
       return "completion/" + std::to_string(input.instance.number()) + "/" +
           std::to_string(input.ballot.number()) + "/" + std::to_string(input.token.value) +
@@ -47,12 +57,7 @@ std::string fingerprint(const Effect& effect) {
     else if constexpr (std::is_same_v<T, SubmissionRegistered>)
       return "registered/" + std::to_string(output.instance.number());
     else {
-      std::string text = "slow-ready/" + std::to_string(output.instance.number()) + "/" +
-          std::to_string(output.ballot.number());
-      for (const auto& [sender, dependencies] : output.observations)
-        text += "/" + canonical(Envelope{sender, output.instance.coordinator(),
-                                      PreAcceptOk{output.instance, dependencies}});
-      return text;
+      return slow_text(output);
     }
   }, effect);
 }
@@ -145,6 +150,9 @@ void ReplicaEndpoint::apply(const protocol::Effect& effect) {
     using T = std::decay_t<decltype(output)>;
     if constexpr (std::is_same_v<T, protocol::SendMessage>) {
       network_.send(output.envelope);
+    } else if constexpr (std::is_same_v<T, protocol::SlowPathReady>) {
+      // Local continuation uses the same frame stack as immediate self-delivery.
+      dispatch_one(protocol::Event{output});
     } else if constexpr (std::is_same_v<T, protocol::CancelTimer>) {
       cancel(output.token);
     } else if constexpr (std::is_same_v<T, protocol::ScheduleTimer>) {

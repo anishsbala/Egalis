@@ -15,15 +15,37 @@ struct DispatchResult {
   Effects effects;
   bool operator==(const DispatchResult&) const = default;
 };
+enum class InitialSelection { collecting, fast, slow };
+struct SlowProposal {
+  Ballot ballot;
+  kv::Payload command;
+  Dependencies dependencies;
+  bool operator==(const SlowProposal&) const = default;
+};
+struct SlowVotes {
+  Quorum responders;
+  bool sealed = false;
+};
+struct CommittedDecision {
+  kv::Payload command;
+  Dependencies dependencies;
+  bool operator==(const CommittedDecision&) const = default;
+};
 struct InstanceRecord {
   InstanceState state;
+  // Retained decision evidence, independent of the current accepted candidate.
+  std::optional<CommittedDecision> committed_decision;
   std::optional<TimerGuard> timer;
   // Purpose-bound separately from manually armed mechanism timers.
   std::optional<TimerGuard> initial_grace;
   // Transient coordinator state, engaged only by a local submission.
   std::optional<PreAcceptObservations> preaccept_observations;
   // Once selected, the observations are the frozen quorum for this round.
-  bool initial_quorum_selected = false;
+  InitialSelection initial_selection = InitialSelection::collecting;
+  // Immutable coordinator candidate, separate from the local preaccept vote.
+  std::optional<SlowProposal> slow_proposal;
+  // Engaged only when this replica issues the corresponding frozen proposal.
+  std::optional<SlowVotes> slow_votes;
 };
 
 // Serialized, non-reentrant ownership boundary. No callbacks, threads, transport,
@@ -62,9 +84,12 @@ class Replica {
   DispatchResult receive_preaccept_ok(ReplicaId source, const PreAcceptOk& message);
   DispatchResult select_initial(InstanceId instance, PreAcceptObservations observations,
                                 bool grace_expired = false);
+  DispatchResult receive_accept(ReplicaId source, const Accept& message);
+  DispatchResult receive_accept_ok(ReplicaId source, const AcceptOk& message);
   DispatchResult receive_commit(const Commit& message);
   DispatchResult handle(const TimerFired& input);
   DispatchResult handle(const Completed& input);
+  DispatchResult handle(const SlowPathReady& input);
   ReplicaId id_;
   InstanceAllocator allocator_;
   std::map<InstanceId, InstanceRecord> instances_;

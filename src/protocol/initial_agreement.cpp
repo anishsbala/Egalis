@@ -22,7 +22,7 @@ DispatchResult Replica::receive_preaccept_ok(ReplicaId source, const PreAcceptOk
   const auto found = instances_.find(message.id);
   if (found == instances_.end()) return {DispatchStatus::stale, {}};
   auto& record = found->second;
-  if (!record.preaccept_observations || record.initial_quorum_selected ||
+  if (!record.preaccept_observations || record.initial_selection != InitialSelection::collecting ||
       !initial_observation_allowed(record.state))
     return {DispatchStatus::stale, {}};
   const auto& observations = *record.preaccept_observations;
@@ -71,7 +71,8 @@ DispatchResult Replica::select_initial(InstanceId instance, PreAcceptObservation
   // before any self message or local handoff can be executed by the runner.
   if (grace && !record.initial_grace) ++next_timer_;
   record.preaccept_observations = std::move(observations);
-  record.initial_quorum_selected = fast || slow;
+  record.initial_selection = fast ? InitialSelection::fast
+      : slow ? InitialSelection::slow : InitialSelection::collecting;
   record.initial_grace = grace;
   return result;
 }

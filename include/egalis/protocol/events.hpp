@@ -60,7 +60,15 @@ struct Completed {
   CompletionStatus status;
   bool operator==(const Completed&) const = default;
 };
-using Event = std::variant<Submit, PeerMessage, TimerFired, Completed, SubmitCommand>;
+// Owned local handoff, never a peer vote or an agreement decision. C019 consumes
+// this frozen snapshot to construct Accept without requiring another input.
+struct SlowPathReady {
+  InstanceId instance;
+  Ballot ballot;
+  std::map<ReplicaId, Dependencies> observations;
+  bool operator==(const SlowPathReady&) const = default;
+};
+using Event = std::variant<Submit, PeerMessage, TimerFired, Completed, SubmitCommand, SlowPathReady>;
 
 struct SendMessage {
   Envelope envelope;
@@ -86,14 +94,6 @@ struct CancelTimer {
 struct SubmissionRegistered {
   InstanceId instance;
   bool operator==(const SubmissionRegistered&) const = default;
-};
-// Owned local handoff, never a peer vote or an agreement decision. C019 consumes
-// this frozen snapshot to construct Accept without requiring another input.
-struct SlowPathReady {
-  InstanceId instance;
-  Ballot ballot;
-  std::map<ReplicaId, Dependencies> observations;
-  bool operator==(const SlowPathReady&) const = default;
 };
 using Effect = std::variant<SendMessage, ScheduleTimer, CancelTimer, SubmissionRegistered,
                             SlowPathReady>;
