@@ -1,4 +1,6 @@
 # Project scope only; inherit the user's model, sandbox and approval policy.
+# One coordinator; reserve this budget for independent, meaningful work.
+# Iteration and strict gates are defined in AGENTS.md.
 [agents]
 enabled = true
 max_concurrent_threads_per_session = 3

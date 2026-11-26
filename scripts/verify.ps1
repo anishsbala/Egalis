@@ -8,6 +8,7 @@ param(
     [string]$CTest = 'ctest',
     [string]$Generator = 'Ninja',
     [string]$Compiler,
+    [string]$CompilerLauncher,
     [string]$Ninja,
     [string]$GTestPrefix,
     [ValidateNotNullOrEmpty()][ValidateSet('Debug', 'Release')][string[]]$Configuration = @('Debug', 'Release'),
@@ -24,11 +25,23 @@ $BuildRoot = [IO.Path]::GetFullPath($BuildRoot)
 New-Item -ItemType Directory -Force -Path $BuildRoot | Out-Null
 $run = Join-Path $BuildRoot ('evidence-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $run | Out-Null
+$overallClock = [Diagnostics.Stopwatch]::StartNew()
 $commands = New-Object System.Collections.ArrayList
 $results = New-Object System.Collections.ArrayList
 $evidence = [ordered]@{
     startedUtc = [DateTime]::UtcNow.ToString('o')
     completedUtc = $null
+    elapsedSeconds = $null
+    # A configured launcher is not evidence of cache hits. No cache statistics
+    # are collected here; never infer a warm cache from its executable path.
+    compilerLauncher = [ordered]@{
+        requested = $CompilerLauncher; resolved = $null; sha256 = $null
+        version = 'unknown'; cacheState = 'unknown'
+    }
+    settings = [ordered]@{
+        configurations = @($Configuration); generator = $Generator; compiler = $Compiler
+        ninja = $Ninja; gtestPrefix = $GTestPrefix; parallel = $Parallel; sanitizers = [bool]$Sanitizers
+    }
     source = $SourceDir
     sourceKind = $null
     sourceRevision = $null
@@ -41,26 +54,36 @@ $evidence = [ordered]@{
     error = $null
 }
 
-function Invoke-Checked([string]$Executable, [string[]]$Arguments, [string]$LogName) {
+function Invoke-Checked([string]$Executable, [string[]]$Arguments, [string]$LogName,
+                        [string]$Phase = 'provenance', [string]$ConfigurationTag = '') {
     $log = Join-Path $run $LogName
-    $entry = [ordered]@{ executable = $Executable; arguments = $Arguments; log = $log; exitCode = $null }
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    $entry = [ordered]@{ executable = $Executable; arguments = $Arguments; log = $log; exitCode = $null
+        phase = $Phase; configuration = $ConfigurationTag; startedUtc = [DateTime]::UtcNow.ToString('o')
+        completedUtc = $null; elapsedSeconds = $null; error = $null }
     [void]$commands.Add($entry)
-    # Fail before invocation if resolution fails; otherwise a missing executable
-    # could leave a previous successful LASTEXITCODE in Windows PowerShell.
-    $resolved = Get-Command $Executable -ErrorAction Stop
-    $savedPreference = $ErrorActionPreference
     try {
-        # Windows PowerShell represents native stderr as ErrorRecords. Capture
-        # those diagnostics and then decide using the native process exit code.
-        $ErrorActionPreference = 'Continue'
-        $output = @(& $resolved @Arguments 2>&1)
-        $code = $LASTEXITCODE
-    } finally { $ErrorActionPreference = $savedPreference }
-    $entry.exitCode = $code
-    $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
-    [IO.File]::WriteAllText($log, $text + "`n", (New-Object Text.UTF8Encoding($false)))
-    if ($code -ne 0) { throw "Native command failed ($code): $Executable; see $log" }
-    return $text
+        # Resolution belongs inside the timed failure boundary.
+        $resolved = Get-Command $Executable -ErrorAction Stop
+        $savedPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = @(& $resolved @Arguments 2>&1)
+            $code = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $savedPreference }
+        $entry.exitCode = $code
+        $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+        [IO.File]::WriteAllText($log, $text + "`n", (New-Object Text.UTF8Encoding($false)))
+        if ($code -ne 0) { throw "Native command failed ($code): $Executable; see $log" }
+        return $text
+    } catch {
+        $entry.error = $_.Exception.Message
+        throw
+    } finally {
+        $clock.Stop()
+        $entry.completedUtc = [DateTime]::UtcNow.ToString('o')
+        $entry.elapsedSeconds = $clock.Elapsed.TotalSeconds
+    }
 }
 
 try {
@@ -81,26 +104,35 @@ try {
         $evidence.sourceRevision = $SourceRevision
         $evidence.sourceTree = $SourceTree
     }
-    Invoke-Checked $CMake @('--version') 'cmake-version.log' | Out-Null
-    Invoke-Checked $CTest @('--version') 'ctest-version.log' | Out-Null
+    if ($CompilerLauncher) {
+        $launcherCommand = Get-Command $CompilerLauncher -CommandType Application -ErrorAction Stop
+        $evidence.compilerLauncher.resolved = $launcherCommand.Path
+        if (!$evidence.compilerLauncher.resolved) { throw 'Compiler launcher must resolve to an executable file' }
+        # Record the resolved bytes, not only a mutable path. Hash failure must
+        # stop verification. Arbitrary wrappers need not support --version.
+        $evidence.compilerLauncher.sha256 = (Get-FileHash -LiteralPath $launcherCommand.Path -Algorithm SHA256 -ErrorAction Stop).Hash
+    }
+    Invoke-Checked $CMake @('--version') 'cmake-version.log' 'toolchain' | Out-Null
+    Invoke-Checked $CTest @('--version') 'ctest-version.log' 'toolchain' | Out-Null
     foreach ($config in $Configuration) {
         $build = Join-Path (Join-Path $run 'build') $config.ToLowerInvariant()
         # CMake >=3.24 maps this to /WX on MSVC and -Werror on GCC/Clang.
         $args = @('-S', $SourceDir, '-B', $build, '-G', $Generator,
             "-DCMAKE_BUILD_TYPE=$config", '-DBUILD_TESTING=ON', '-DCMAKE_COMPILE_WARNING_AS_ERROR=ON')
+        if ($CompilerLauncher) { $args += "-DCMAKE_CXX_COMPILER_LAUNCHER=$($evidence.compilerLauncher.resolved)" }
         if ($Compiler) { $args += "-DCMAKE_CXX_COMPILER=$Compiler" }
         if ($Ninja) { $args += "-DCMAKE_MAKE_PROGRAM=$Ninja" }
         if ($GTestPrefix) { $args += "-DCMAKE_PREFIX_PATH=$GTestPrefix" }
         $sanitizerMode = if ($Sanitizers) { 'ON' } else { 'OFF' }
         $args += "-DEGALIS_ENABLE_SANITIZERS=$sanitizerMode"
-        Invoke-Checked $CMake $args "$config-configure.log" | Out-Null
-        Invoke-Checked $CMake @('--build', $build, '--config', $config, '--parallel', "$Parallel") "$config-build.log" | Out-Null
-        $inventory = Invoke-Checked $CTest @('--test-dir', $build, '-C', $config, '--show-only=json-v1') "$config-inventory.json"
+        Invoke-Checked $CMake $args "$config-configure.log" 'configure' $config | Out-Null
+        Invoke-Checked $CMake @('--build', $build, '--config', $config, '--parallel', "$Parallel") "$config-build.log" 'build' $config | Out-Null
+        $inventory = Invoke-Checked $CTest @('--test-dir', $build, '-C', $config, '--show-only=json-v1') "$config-inventory.json" 'inventory' $config
         $discovered = @((ConvertFrom-Json $inventory).tests)
         $count = $discovered.Count
         if ($count -eq 0) { throw "No tests discovered in $config" }
         $junit = Join-Path $run "$config-tests.xml"
-        Invoke-Checked $CTest @('--test-dir', $build, '-C', $config, '--output-on-failure', '--no-tests=error', '--output-junit', $junit) "$config-tests.log" | Out-Null
+        Invoke-Checked $CTest @('--test-dir', $build, '-C', $config, '--output-on-failure', '--no-tests=error', '--output-junit', $junit) "$config-tests.log" 'tests' $config | Out-Null
         [xml]$report = Get-Content -LiteralPath $junit -Raw
         if ($report.SelectNodes('//testcase').Count -ne $count) { throw "JUnit count does not match discovered tests in $config" }
         # Equal counts do not prove every discovered test ran: substitutions or
@@ -124,6 +156,8 @@ try {
     $evidence.error = $_.Exception.Message
     throw
 } finally {
+    $overallClock.Stop()
+    $evidence.elapsedSeconds = $overallClock.Elapsed.TotalSeconds
     $evidence.completedUtc = [DateTime]::UtcNow.ToString('o')
     $json = $evidence | ConvertTo-Json -Depth 8
     [IO.File]::WriteAllText((Join-Path $run 'verification.json'), $json + "`n", (New-Object Text.UTF8Encoding($false)))

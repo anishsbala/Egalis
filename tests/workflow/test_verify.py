@@ -5,9 +5,11 @@ are PowerShell scripts, so the tests are portable and never fetch dependencies.
 """
 
 import json
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -21,7 +23,7 @@ class VerificationRunnerTests(unittest.TestCase):
     def run_fixture(self, *, cmake_exit=0, tests=1, ctest_exit=0, skipped=False,
                     missing=False, export=False, provenance=False,
                     empty_report=False, report_failure=False, build_exit=0,
-                    repetitions=1, report_name='fixture'):
+                    repetitions=1, report_name='fixture', launcher=None, sanitizers=False):
         with tempfile.TemporaryDirectory(prefix="egalis-verify-") as folder:
             fixture = Path(folder)
             subprocess.run(["git", "init", "-q", str(fixture)], check=True)
@@ -55,7 +57,21 @@ class VerificationRunnerTests(unittest.TestCase):
             command = [SHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "scripts/verify.ps1"),
                  "-SourceDir", str(source), "-BuildRoot", str(fixture / "build"),
                  "-CMake", str(fixture / 'missing-executable' if missing else cmake), "-CTest", str(ctest)] + extra
-            for _ in range(repetitions):
+            if sanitizers:
+                command += ['-Sanitizers']
+            if launcher:
+                extra_launcher = sys.executable if launcher == "existing" else str(fixture / "missing-launcher")
+                if launcher == 'mutable':
+                    extra_launcher = str(fixture / ('launcher' + Path(sys.executable).suffix))
+                    shutil.copy2(sys.executable, extra_launcher)
+                command += ["-CompilerLauncher", extra_launcher]
+            self.launcher_digests = []
+            for iteration in range(repetitions):
+                if launcher == 'mutable':
+                    if iteration:
+                        with open(extra_launcher, 'ab') as stream:
+                            stream.write(b'changed-launcher-content')
+                    self.launcher_digests.append(hashlib.sha256(Path(extra_launcher).read_bytes()).hexdigest())
                 proc = subprocess.run(command, capture_output=True, text=True)
             evidence_paths = sorted((fixture / "build").glob("evidence-*/verification.json"))
             self.assertEqual(len(evidence_paths), repetitions, proc.stdout + proc.stderr)
@@ -74,6 +90,54 @@ class VerificationRunnerTests(unittest.TestCase):
         self.assertFalse(evidence["success"])
         self.assertEqual(evidence["commands"][-1]["exitCode"], 17)
         self.assertEqual(evidence["configurations"], [])
+
+    def test_failure_and_resolution_have_complete_timing(self):
+        for options in ({"cmake_exit": 17}, {"missing": True}):
+            with self.subTest(options=options):
+                _, evidence = self.run_fixture(**options)
+                self.assertGreaterEqual(evidence['elapsedSeconds'], 0)
+                for entry in evidence['commands']:
+                    self.assertTrue(entry['startedUtc'])
+                    self.assertTrue(entry['completedUtc'])
+                    self.assertGreaterEqual(entry['elapsedSeconds'], 0)
+                    self.assertTrue(entry['phase'])
+                    self.assertIn('configuration', entry)
+
+    def test_launcher_is_resolved_and_passed_to_each_fresh_configure(self):
+        proc, evidence = self.run_fixture(launcher='existing')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertTrue(evidence['compilerLauncher']['resolved'])
+        configs = [x for x in evidence['commands'] if x['phase'] == 'configure']
+        self.assertEqual([x['configuration'] for x in configs], ['Debug', 'Release'])
+        self.assertTrue(all(any(a.startswith('-DCMAKE_CXX_COMPILER_LAUNCHER=') for a in x['arguments']) for x in configs))
+
+    def test_launcher_identity_changes_when_same_path_contents_change(self):
+        proc, _ = self.run_fixture(launcher='mutable', repetitions=2)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        launchers = [run['compilerLauncher'] for run in self.completed_runs]
+        self.assertEqual(launchers[0]['resolved'], launchers[1]['resolved'])
+        self.assertNotEqual(self.launcher_digests[0], self.launcher_digests[1])
+        self.assertEqual([entry['sha256'].lower() for entry in launchers], self.launcher_digests)
+        self.assertTrue(all(entry['version'] == 'unknown' for entry in launchers))
+        self.assertTrue(all(run['success'] for run in self.completed_runs))
+
+    def test_configuration_provenance_and_sanitizers_are_explicit(self):
+        proc, evidence = self.run_fixture(sanitizers=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(evidence['settings']['configurations'], ['Debug', 'Release'])
+        self.assertEqual(evidence['settings']['generator'], 'Ninja')
+        self.assertTrue(evidence['settings']['sanitizers'])
+        self.assertEqual(evidence['compilerLauncher']['cacheState'], 'unknown')
+        configs = [x for x in evidence['commands'] if x['phase'] == 'configure']
+        self.assertTrue(all('-DEGALIS_ENABLE_SANITIZERS=ON' in x['arguments'] for x in configs))
+        self.assertTrue(all('-DCMAKE_COMPILE_WARNING_AS_ERROR=ON' in x['arguments'] for x in configs))
+
+    def test_missing_launcher_fails_before_configure(self):
+        proc, evidence = self.run_fixture(launcher='missing')
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertFalse(evidence['success'])
+        self.assertFalse(any('-S' in x['arguments'] for x in evidence['commands']))
+        self.assertIn('compilerLauncher', evidence)
 
     def test_zero_tests_is_not_a_success(self):
         proc, evidence = self.run_fixture(tests=0)

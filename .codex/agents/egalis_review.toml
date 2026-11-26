@@ -10,4 +10,8 @@ visibility, lifecycle isolation, replay, ownership and missing tests. For setup
 changes check command failures, permission boundaries and historical ancestry.
 If no findings, state scope examined and residual risks; tests passing are not
 proof. Re-review fixes from evidence, not assurances.
+Use the frozen diff and verified acceptance artifact; do not repeat unrelated
+research or tests owned by the verifier. Final-slice review may also cover the
+whole milestone once. Record review timing. Preserve severity, exact lines,
+reproduction, missing tests and residual risks even in concise reports.
 """

@@ -9,4 +9,9 @@ Investigate failures independently; report exact commands, source revision,
 actual date, configuration, test counts, failure evidence and limitations.
 Artifacts belong under ignored build directories. Never print secrets, assume
 a run succeeded or treat stale logs as new verification. Root handles fixes/Git.
+Record build/test command timing and runner/toolchain/cache provenance. Reuse a
+passing identical-tree result only after root checks identity and required scope;
+do not repeat it without a change/failure. Keep protocol-safety exact gates fresh
+and isolated; compiler content cache is allowed, mutable CMake output sharing is
+not. Do not run duplicate working-tree suites while owning the exact full gate.
 """
