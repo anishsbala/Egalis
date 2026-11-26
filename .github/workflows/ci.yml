@@ -1,20 +1,70 @@
 name: cpp
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: cpp-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  build:
+  verify:
+    name: verify (${{ matrix.compiler }})
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         compiler: [g++, clang++]
-        sanitizers: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@v4
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DEGALIS_ENABLE_SANITIZERS=${{ matrix.sanitizers }}
-      - name: Build
-        run: cmake --build build --parallel 2
-      - name: Test
+        with:
+          persist-credentials: false
+      - name: Debug and Release, warnings as errors
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Compiler '${{ matrix.compiler }}' -BuildRoot build/ci
+      - name: Workflow regression tests
+        run: python3 -m unittest discover -s tests/workflow -v
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-${{ matrix.compiler }}
+          path: |
+            build/ci/evidence-*/*.log
+            build/ci/evidence-*/*.json
+            build/ci/evidence-*/*.xml
+          retention-days: 14
+  sanitizers:
+    name: sanitizers (${{ matrix.compiler }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: ASan and UBSan
+        shell: pwsh
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: halt_on_error=1
-        run: ctest --test-dir build --output-on-failure
+        run: ./scripts/verify.ps1 -Compiler '${{ matrix.compiler }}' -Configuration Debug -Sanitizers -BuildRoot build/sanitizers
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sanitizers-${{ matrix.compiler }}
+          path: |
+            build/sanitizers/evidence-*/*.log
+            build/sanitizers/evidence-*/*.json
+            build/sanitizers/evidence-*/*.xml
+          retention-days: 14
+  required:
+    name: required
+    if: always()
+    needs: [verify, sanitizers]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: All verification must succeed
+        env:
+          VERIFY: ${{ needs.verify.result }}
+          SANITIZERS: ${{ needs.sanitizers.result }}
+        run: test "$VERIFY" = success && test "$SANITIZERS" = success
