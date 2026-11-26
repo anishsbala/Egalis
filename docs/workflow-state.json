@@ -4,23 +4,72 @@
   "engineering_branch": "main",
   "engineering_head": "32e0c855d96af7154872d9e27352d2c7d3219005",
   "checkpoint_anchor": "675f0435fce834a9abec39b6a4476e5281b240ab",
-  "completed_milestones": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "completed_milestones": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
   "completed_slice": "C014",
-  "next_milestone": 10,
-  "next_slices": ["C015", "C016", "C017", "C018"],
+  "next_milestone": 11,
+  "next_slices": [
+    "C019",
+    "C020",
+    "C021",
+    "C022"
+  ],
   "execution_mode": "sequential_until_roadmap_complete",
-  "authorized_range": {"from": 10, "through": 36, "authorized_on": "2026-11-23"},
-  "status": "active: baseline Debug/Release 122/122 verified; C015 TDD implementation assigned",
-  "active_engineering_branch": "feature/m10-fast-agreement",
-  "active_engineering_worktree": "C:/Users/anish/.codex/worktrees/egalis-m10/Egalis",
+  "authorized_range": {
+    "from": 10,
+    "through": 36,
+    "authorized_on": "2026-11-23"
+  },
+  "status": "active: M10 verified-unmerged PR2 green; M11 C019 dependency-ready",
+  "active_slice": "C019",
+  "active_engineering_tip": "ae50e873313af131f7648a295bfe64569fa6c137",
+  "active_engineering_branch": "feature/m11-slow-agreement",
+  "active_engineering_worktree": "C:/Coding Projects/Egalis-m10",
   "active_task": "docs/tasks/sequential-development.md",
-  "last_verified_branch": "main",
-  "last_verified_tip": "32e0c855d96af7154872d9e27352d2c7d3219005",
-  "verified_unmerged_milestones": [],
-  "integrated_state_fields": ["engineering_head", "completed_milestones", "completed_slice"],
-  "automatic_advance_requires": ["acceptance", "exact_tree_debug_release", "independent_review", "resolved_findings", "green_ci", "persisted_evidence"],
+  "last_verified_branch": "feature/m10-fast-agreement",
+  "last_verified_tip": "ae50e873313af131f7648a295bfe64569fa6c137",
+  "verified_unmerged_milestones": [
+    {
+      "milestone": 10,
+      "branch": "feature/m10-fast-agreement",
+      "tip": "ae50e873313af131f7648a295bfe64569fa6c137",
+      "base": "32e0c855d96af7154872d9e27352d2c7d3219005",
+      "tree": "f5c22009f96cb728b7e14bf61f0459e09035fc08",
+      "pr": "https://github.com/anishsbala/Egalis/pull/2",
+      "debug_tests": 159,
+      "release_tests": 159,
+      "review": "PASS",
+      "ci": "PASS",
+      "human_approval": "pending",
+      "integrated": false
+    }
+  ],
+  "integrated_state_fields": [
+    "engineering_head",
+    "completed_milestones",
+    "completed_slice"
+  ],
+  "automatic_advance_requires": [
+    "acceptance",
+    "exact_tree_debug_release",
+    "independent_review",
+    "resolved_findings",
+    "green_ci",
+    "persisted_evidence"
+  ],
   "milestone_35": "conditional on profiling; document omission rather than fabricate optimization",
   "repair_cycle_limit": 3,
   "setup_task": "docs/tasks/orchestration-setup.md",
-  "merge_policy": "No automatic merges. Control ancestry stays off main. Historical feature integration requires user-reviewed merge policy."
+  "merge_policy": "No automatic merges. Control ancestry stays off main. Historical feature integration requires user-reviewed merge policy.",
+  "active_pr": null,
+  "predecessor_pr": "https://github.com/anishsbala/Egalis/pull/2"
 }

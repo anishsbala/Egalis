@@ -44,12 +44,15 @@ Commit(0,id,command,initial-deps), exactly once, to all five members.
 
 - [ ] RED tests: three votes/four packets with duplicate never commit; fourth
   original distinct vote commits without fifth; equal expanded values cannot
-  fast commit; late/fifth/repeated replies cannot send another proposal.
+  fast commit; mixed original/expanded observations must also never fast commit
+  (distinguish all-of from any-of); late/fifth/repeated replies cannot send another proposal.
 - [ ] RED Commit receipt tests: unknown Commit(0) materializes directly, exact
   ballot guard, duplicate idempotence, contradictory committed values reject,
   lagging receiver may replace expanded dep with chosen smaller dep, initial
   metadata retained, no client success/execution. Pure fixtures cover higher
-  ballot guard directions without implementing future recovery.
+  ballot guard directions without implementing future recovery. Materializing
+  a locally owned ID through Commit must advance the same allocator high-water
+  mark as PreAccept, so a later SubmitCommand cannot alias or stall on that ID.
 - [ ] Adapt only obsolete unsupported/PreAccepted-only expectations in existing
   tests, retaining substantive invariants. Complete tests/review/staged gate.
 - [ ] Commit `protocol: commit baseline fast-path decisions`,
