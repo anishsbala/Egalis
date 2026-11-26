@@ -56,4 +56,15 @@ TEST(ReplicaContract, InPlaceSendOwnsTheConcreteMessageAndItsDependencies) {
       PreAcceptOk{id, {InstanceId{2, ReplicaId{1}}}}}));
   EXPECT_NO_THROW(validate(reply));
 }
+TEST(ReplicaContract, SlowHandoffRequiresInitialBallotAndAValidDistinctSlowQuorum) {
+  const std::map<ReplicaId, Dependencies> quorum{{ReplicaId{0}, {}},
+      {ReplicaId{1}, {}}, {ReplicaId{2}, {InstanceId{2, ReplicaId{1}}}}};
+  EXPECT_NO_THROW(validate(Effect{SlowPathReady{id, {}, quorum}}));
+  EXPECT_THROW(validate(Effect{SlowPathReady{id, {}, {}}}), std::invalid_argument);
+  EXPECT_THROW(validate(Effect{SlowPathReady{id, Ballot::recovery(1, ReplicaId{0}), quorum}}),
+               std::invalid_argument);
+  auto invalid = quorum;
+  invalid.at(ReplicaId{2}).insert(id);
+  EXPECT_THROW(validate(Effect{SlowPathReady{id, {}, invalid}}), std::invalid_argument);
+}
 }  // namespace egalis::protocol

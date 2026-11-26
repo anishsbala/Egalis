@@ -62,7 +62,9 @@ TEST(ReplicaEndpoint, EndpointDispatchUsesTheSameCoreAndPreacceptsWithoutCommitt
   auto& source = ReplicaEndpoint::attach(network, local);
   auto& target = ReplicaEndpoint::attach(network, ReplicaId{1});
   source.dispatch(submission());
-  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::unsupported);  // PreAcceptOK collection is deferred.
+  EXPECT_EQ(source.last_status(), protocol::DispatchStatus::processed);
+  EXPECT_EQ(source.core().instances().at(id).preaccept_observations,
+            (protocol::PreAcceptObservations{{local, {}}}));
   source.execute(sends({message(0, 1)}));
   EXPECT_EQ(target.dispatch_count(), 0U);
   EXPECT_EQ(network.scheduler().run(), 6U);  // Four PreAccepts, Waiting and a remote PreAcceptOK.
@@ -233,6 +235,29 @@ TEST(ReplicaEndpoint, RestartHookFailureAlsoStopsNetwork) {
   network.crash(local);
   EXPECT_THROW(network.restart(local), std::runtime_error);
   EXPECT_TRUE(network.scheduler().failed());
+}
+TEST(ReplicaEndpoint, FailedRestartCannotExecuteTimersQueuedByItsHook) {
+  Network network;
+  bool callback_ran = false;
+  class RearmThenFail final : public transport::Endpoint {
+   public:
+    RearmThenFail(Network& network, bool& callback_ran)
+        : network_(network), callback_ran_(callback_ran) {}
+    void receive(const protocol::Envelope&) override {}
+    void on_restart() override {
+      network_.timer(local, {0}, "failed-restart-timer", [this] { callback_ran_ = true; });
+      throw std::runtime_error("restart failed after rearm");
+    }
+   private:
+    Network& network_;
+    bool& callback_ran_;
+  };
+  network.attach(local, std::make_unique<RearmThenFail>(network, callback_ran));
+  network.crash(local);
+  EXPECT_THROW(network.restart(local), std::runtime_error);
+  EXPECT_TRUE(network.scheduler().failed());
+  EXPECT_THROW(network.scheduler().run(), std::logic_error);
+  EXPECT_FALSE(callback_ran);
 }
 TEST(ReplicaEndpoint, AllocatedSubmissionInputsReplayAndResumeWithoutIdReuse) {
   const auto run = [](Network& network) {

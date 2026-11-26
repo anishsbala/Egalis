@@ -29,6 +29,13 @@ void validate(const Effect& effect) {
     if constexpr (std::is_same_v<T, SendMessage>) validate(output.envelope);
     if constexpr (std::is_same_v<T, ScheduleTimer>) token(output.guard.token.value);
     if constexpr (std::is_same_v<T, CancelTimer>) token(output.token.value);
+    if constexpr (std::is_same_v<T, SlowPathReady>) {
+      if (!output.ballot.initial() || output.observations.size() < Configuration::slow_quorum)
+        throw std::invalid_argument("invalid initial slow handoff");
+      for (const auto& [sender, dependencies] : output.observations)
+        validate(Envelope{sender, output.instance.coordinator(),
+                          PreAcceptOk{output.instance, dependencies}});
+    }
   }, effect);
 }
 }  // namespace egalis::protocol

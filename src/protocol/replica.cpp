@@ -20,12 +20,13 @@ DispatchResult Replica::handle(const Submit& input) {
   if (instances_.contains(input.instance))
     throw std::invalid_argument("submission reuses an instance ID");
   const auto proposed = known_dependencies(input.instance, input.command);
-  // Frozen pending self-PreAccept metadata, not a vote. The runner must finish
-  // the local effect before remote effects; C013 supplies the receive handler.
+  // Freeze the proposal and open an empty collector. The runner delivers the
+  // self-PreAccept and its real reply before sending the remote effects.
   InstanceRecord record;
   record.state.command = input.command;
   record.state.initial_command = input.command;
   record.state.initial_dependencies = proposed;
+  record.preaccept_observations.emplace();
   DispatchResult result{DispatchStatus::processed, {SubmissionRegistered{input.instance}}};
   result.effects.reserve(1 + Configuration::replicas);
   const auto send = [&](ReplicaId destination) {
@@ -46,11 +47,23 @@ DispatchResult Replica::handle(const PeerMessage& input) {
     throw std::invalid_argument("message delivered to wrong replica");
   if (const auto* message = std::get_if<PreAccept>(&input.envelope.message))
     return receive_preaccept(input.envelope.source, *message);
-  // PreAcceptOK collection, agreement and recovery remain later milestones.
+  if (const auto* message = std::get_if<PreAcceptOk>(&input.envelope.message))
+    return receive_preaccept_ok(input.envelope.source, *message);
+  if (const auto* message = std::get_if<Commit>(&input.envelope.message))
+    return receive_commit(*message);
   return {DispatchStatus::unsupported, {}};
 }
 DispatchResult Replica::handle(const TimerFired& input) {
   const auto found = instances_.find(input.guard.instance);
+  if (found != instances_.end() && found->second.initial_grace == input.guard) {
+    const auto& record = found->second;
+    if (record.initial_quorum_selected || !record.preaccept_observations ||
+        !initial_observation_allowed(record.state) ||
+        record.state.ballots.current != input.guard.ballot ||
+        record.preaccept_observations->size() < Configuration::slow_quorum)
+      return {DispatchStatus::stale, {}};
+    return select_initial(input.guard.instance, *record.preaccept_observations, true);
+  }
   if (found == instances_.end() || found->second.timer != input.guard ||
       found->second.state.ballots.current != input.guard.ballot)
     return {DispatchStatus::stale, {}};
@@ -84,18 +97,43 @@ Effects Replica::arm_timer(InstanceId instance, TimerDelay delay) {
 Effects Replica::suspend() {
   require_active();
   Effects effects;
-  effects.reserve(instances_.size());
+  effects.reserve(instances_.size() * 2);
   for (const auto& [id, record] : instances_) {
     (void)id;
     if (record.timer)
       effects.emplace_back(std::in_place_type<CancelTimer>, CancelTimer{record.timer->token});
+    if (record.initial_grace)
+      effects.emplace_back(std::in_place_type<CancelTimer>, CancelTimer{record.initial_grace->token});
   }
-  for (auto& [id, record] : instances_) { (void)id; record.timer.reset(); }
+  for (auto& [id, record] : instances_) {
+    (void)id;
+    record.timer.reset();
+    record.initial_grace.reset();
+  }
   active_ = false;
   return effects;
 }
-void Replica::resume() {
+Effects Replica::resume() {
   if (active_) throw std::logic_error("replica is already active");
+  Effects effects;
+  auto next = next_timer_;
+  for (const auto& [id, record] : instances_) {
+    if (!record.initial_quorum_selected && record.preaccept_observations &&
+        initial_observation_allowed(record.state) &&
+        record.preaccept_observations->size() >= Configuration::slow_quorum &&
+        observations_match_initial_dependencies(*record.preaccept_observations, record.state)) {
+      if (next == std::numeric_limits<std::uint64_t>::max())
+        throw std::overflow_error("timer tokens exhausted");
+      effects.emplace_back(std::in_place_type<ScheduleTimer>,
+          ScheduleTimer{{id, record.state.ballots.current, {next++}}, {1}});
+    }
+  }
+  for (const auto& effect : effects) {
+    const auto& guard = std::get<ScheduleTimer>(effect).guard;
+    instances_.at(guard.instance).initial_grace = guard;
+  }
+  next_timer_ = next;
   active_ = true;
+  return effects;
 }
 }  // namespace egalis::protocol

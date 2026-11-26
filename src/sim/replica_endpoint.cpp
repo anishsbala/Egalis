@@ -44,7 +44,16 @@ std::string fingerprint(const Effect& effect) {
       return "schedule/" + guard_text(output.guard) + "/" + std::to_string(output.delay.ticks);
     else if constexpr (std::is_same_v<T, CancelTimer>)
       return "cancel/" + std::to_string(output.token.value);
-    else return "registered/" + std::to_string(output.instance.number());
+    else if constexpr (std::is_same_v<T, SubmissionRegistered>)
+      return "registered/" + std::to_string(output.instance.number());
+    else {
+      std::string text = "slow-ready/" + std::to_string(output.instance.number()) + "/" +
+          std::to_string(output.ballot.number());
+      for (const auto& [sender, dependencies] : output.observations)
+        text += "/" + canonical(Envelope{sender, output.instance.coordinator(),
+                                      PreAcceptOk{output.instance, dependencies}});
+      return text;
+    }
   }, effect);
 }
 }
@@ -140,7 +149,8 @@ void ReplicaEndpoint::apply(const protocol::Effect& effect) {
       cancel(output.token);
     } else if constexpr (std::is_same_v<T, protocol::ScheduleTimer>) {
       const auto found = core_.instances().find(output.guard.instance);
-      if (found == core_.instances().end() || found->second.timer != output.guard ||
+      if (found == core_.instances().end() ||
+          (found->second.timer != output.guard && found->second.initial_grace != output.guard) ||
           found->second.state.ballots.current != output.guard.ballot) return;
       if (timers_.contains(output.guard.token))
         throw std::logic_error("timer effect executed twice");
@@ -170,7 +180,7 @@ void ReplicaEndpoint::on_crash() {
 }
 void ReplicaEndpoint::on_restart() {
   if (failed_) throw std::logic_error("failed runner cannot restart");
-  core_.resume();
+  execute(core_.resume());
 }
 
 }  // namespace egalis::sim

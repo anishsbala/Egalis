@@ -45,9 +45,8 @@ TEST(Replica, ValidMessagesAreExplicitlyUnsupportedWithoutAllocatingState) {
   Replica replica{local};
   const auto positive = Ballot::recovery(1, local);
   const std::vector<Message> messages{
-      PreAcceptOk{id, {}},
       Accept{{}, id, kv::Command{kv::Get{"k"}}, {}}, AcceptOk{{}, id},
-      Commit{{}, id, kv::Command{kv::Get{"k"}}, {}}, Recover{positive, id},
+      Recover{positive, id},
       RecoverOk{positive, id, {}, {}, {}, {}, Phase::initial},
       Validate{positive, id, kv::Get{"k"}, {}}, ValidateOk{positive, id, {}},
       Waiting{id}, TryRecover{id}};

@@ -14,8 +14,8 @@ effects run. They are not a vote: phase stays initial until self-PreAccept. This
 is a serialized staging refinement of the paper's immediate self-delivery; no
 external event may intervene before local consequences complete. Current dep is
 not confused with the initial proposal. Registration is not a KV success reply.
-C012 provides submission only; PreAccept receipt and duplicate replay are separate
-subsequent slices. There is no PreAcceptOK collection or commit decision yet.
+C012 introduced submission. C013 and C014 introduced receipt and duplicate
+reply replay, described below.
 
 ## C013 receive transition
 
@@ -26,8 +26,7 @@ known conflicts, and phase=preaccepted; abal stays zero. The response is one
 PreAcceptOK to the initial coordinator. All allocations precede state replacement.
 Pending local metadata must match the frozen self-request; inconsistent inputs
 are rejected without overwriting it. Higher ballots or noninitial phases are
-stale, with no second transition. C014 will refine identical retransmissions.
-PreAcceptOK collection remains unsupported: receiving five votes cannot commit.
+stale, with no second transition. C014 handles identical retransmissions.
 
 ## C014 duplicate policy and response caching
 
@@ -44,8 +43,8 @@ Changed payloads/proposals are rejected with no effects or state mutation.
 Advanced phases/ballots are stale and cannot replay old votes. Missing/inconsistent
 initial metadata cannot authorize replay. No new NACK or recovery rule is added.
 Original initCmd/initDep remain separate from expanded dep, including when an
-identical payload is submitted under a different ID. A future vote collector must
-count distinct replicas, not reply packets; that collector is milestone 10.
+identical payload is submitted under a different ID. C015 collects distinct
+sender replies without modifying this cache. [Initial agreement](initial-agreement.md)
 
 Suspend/resume retains the same volatile record and cache. Queued pre-crash events
 are discarded by network generation; a newly transmitted retry may replay the

@@ -18,12 +18,11 @@ No protocol state guard or agreement rule is introduced by this contract.
 
 ## Authoritative state and dispatch
 
-Replica owns one ordered instance map, exposed read-only. Submit reserves its
-command in an initial local record without setting initial vote metadata or
-emitting network traffic. Reused/foreign IDs are rejected rather than treated as
-client retries. No extra mutable coordinator copy exists. Peer messages validate
-their destination and structure, then return unsupported until their handlers
-land. They do not create records or acknowledge votes.
+Replica owns one ordered instance map, exposed read-only. Submit reserves an
+initial local record, freezes its proposal and emits the PreAccept broadcast.
+Reused/foreign IDs are rejected. Peer messages validate their structure and
+destination before invoking the matching handler. Message types without a handler
+return unsupported. [PreAccept](preaccept.md) · [Initial agreement](initial-agreement.md)
 
 Dispatch returns before any runner executes effects; the core accepts no callbacks.
 All mutation, including timer registration and suspend/resume, is single-threaded.

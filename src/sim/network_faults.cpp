@@ -53,9 +53,11 @@ void Network::restart(protocol::ReplicaId replica) {
   if (!slot.endpoint || !slot.crashed) throw std::logic_error("only crashed endpoints can restart");
   trace_.record({DecisionKind::restarted, {scheduler_.now().ticks, replica.value(), slot.generation}, {}});
   // Reactivates volatile state only. Durable reconstruction remains milestone 27.
-  try { slot.endpoint->on_restart(); }
-  catch (...) { scheduler_.fail(); throw; }
+  // The hook executes explicit rearm effects, whose timers belong to this new
+  // live generation. No scheduler callback can run inside this serialized hook.
   slot.crashed = false;
+  try { slot.endpoint->on_restart(); }
+  catch (...) { slot.crashed = true; scheduler_.fail(); throw; }
 }
 
 EventId Network::timer(protocol::ReplicaId replica, Duration delay, std::string label,
